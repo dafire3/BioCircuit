@@ -104,7 +104,7 @@ export default function ResultScreen({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
               onClick={onRestart}
-              whileHover={{ scale: 1.05, brightness: 1.1 }}
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="px-8 sm:px-12 py-3 sm:py-4 bg-accent text-white text-sm sm:text-base font-semibold rounded-lg transition-all hover:scale-105 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background"
             >

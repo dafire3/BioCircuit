@@ -186,7 +186,7 @@ export default function QuestionWizard({ onComplete }: QuestionWizardProps) {
                     setSelectedYesNo('yes')
                     setTimeout(() => handleYesNoSubmit('yes'), 100)
                   }}
-                  whileHover={{ scale: 1.05, brightness: 1.1 }}
+                  whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className={`w-full sm:w-auto px-8 sm:px-12 py-3 sm:py-4 rounded-full font-semibold text-base sm:text-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background ${
                     selectedYesNo === 'yes'
@@ -201,7 +201,7 @@ export default function QuestionWizard({ onComplete }: QuestionWizardProps) {
                     setSelectedYesNo('no')
                     setTimeout(() => handleYesNoSubmit('no'), 100)
                   }}
-                  whileHover={{ scale: 1.05, brightness: 1.1 }}
+                  whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className={`w-full sm:w-auto px-8 sm:px-12 py-3 sm:py-4 rounded-full font-semibold text-base sm:text-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background ${
                     selectedYesNo === 'no'
