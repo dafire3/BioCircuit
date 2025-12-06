@@ -157,11 +157,11 @@ export default function QuestionWizard({ onComplete }: QuestionWizardProps) {
 
             {/* Input area */}
             {currentQuestion.type === 'text' ? (
-              <div className="relative w-full py-2">
+              <div className="relative w-full" style={{ height: '2.5rem' }}>
                 {/* Underline */}
                 <div
-                  className="absolute top-1/2 left-0 h-px w-full transition-colors duration-300 z-0"
-                  style={{ backgroundColor: lineColor, transform: 'translateY(-50%)' }}
+                  className="absolute bottom-0 left-0 h-px w-full transition-colors duration-300"
+                  style={{ backgroundColor: lineColor }}
                 />
                 {/* Input field - positioned on the line */}
                 <input
@@ -170,17 +170,18 @@ export default function QuestionWizard({ onComplete }: QuestionWizardProps) {
                   value={currentAnswer}
                   onChange={(e) => handleAnswerChange(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="relative w-full bg-transparent border-none outline-none text-white text-lg sm:text-xl md:text-2xl text-center focus:outline-none focus:ring-0 z-10"
+                  className="absolute bottom-0 left-0 w-full bg-transparent border-none outline-none text-white text-lg sm:text-xl md:text-2xl text-center focus:outline-none focus:ring-0"
                   style={{
                     padding: 0,
                     lineHeight: '1',
+                    transform: 'translateY(0)',
                   }}
                   placeholder=""
                   autoFocus
                 />
                 {/* Enter hint */}
                 {!currentAnswer && (
-                  <div className="absolute top-full right-0 mt-2 text-xs text-white/40 pointer-events-none">
+                  <div className="absolute -bottom-6 right-0 text-xs text-white/40 pointer-events-none">
                     Press Enter to continue
                   </div>
                 )}
