@@ -14,17 +14,20 @@ export default function Home() {
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [trainingStarted, setTrainingStarted] = useState(false)
   const [trainingScore, setTrainingScore] = useState<number | null>(null)
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
+  const [pinCoordinates, setPinCoordinates] = useState<{ x: number; y: number } | null>(null)
 
   const handleIntroComplete = () => {
     setStep('upload')
   }
 
-  const handleUploadComplete = (pinCoordinates?: { x: number; y: number }) => {
-    // Store pin coordinates if provided
-    if (pinCoordinates) {
+  const handleUploadComplete = (imageUrl: string, pinCoords?: { x: number; y: number }) => {
+    setUploadedImageUrl(imageUrl)
+    if (pinCoords) {
+      setPinCoordinates(pinCoords)
       setAnswers((prev) => ({
         ...prev,
-        pinCoordinates: `${pinCoordinates.x},${pinCoordinates.y}`,
+        pinCoordinates: `${pinCoords.x},${pinCoords.y}`,
       }))
     }
     setStep('questions')
@@ -46,6 +49,8 @@ export default function Home() {
     setAnswers({})
     setTrainingStarted(false)
     setTrainingScore(null)
+    setUploadedImageUrl(null)
+    setPinCoordinates(null)
   }
 
   return (
@@ -64,6 +69,8 @@ export default function Home() {
           trainingStarted={trainingStarted}
           trainingScore={trainingScore}
           answers={answers}
+          uploadedImageUrl={uploadedImageUrl}
+          pinCoordinates={pinCoordinates}
           onRestart={handleRestart}
         />
       )}

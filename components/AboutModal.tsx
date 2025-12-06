@@ -56,12 +56,8 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                   BioCircuit takes this brilliant strategy and applies it to archaeology. Upload a LiDAR scan or topographical map, answer a few questions about the area, and watch as our AI draws possible routes in every direction—just like slime mold exploring.
                 </p>
                 
-                <p className="text-base sm:text-lg mb-4">
+                <p className="text-base sm:text-lg">
                   The AI then highlights the most efficient path and gives you a percentage chance of finding another artifact. But here's the fun part: when those route lines bend around certain areas on the map, archaeologists can spot patterns that might reveal hidden sites.
-                </p>
-                
-                <p className="text-base sm:text-lg text-white/90 font-medium">
-                  So yeah, we're basically teaching AI to think like a hungry slime mold to help find ancient treasures. Science is weird. And awesome. 🍄
                 </p>
               </div>
             </div>

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 
 interface UploadStepProps {
-  onUploadComplete: (pinCoordinates?: { x: number; y: number }) => void
+  onUploadComplete: (imageUrl: string, pinCoordinates?: { x: number; y: number }) => void
 }
 
 export default function UploadStep({ onUploadComplete }: UploadStepProps) {
@@ -82,14 +82,11 @@ export default function UploadStep({ onUploadComplete }: UploadStepProps) {
   }
 
   const handleContinue = () => {
-    if (!file) return
+    if (!file || !imageUrl) return
 
-    // Clean up object URL
-    if (imageUrl) {
-      URL.revokeObjectURL(imageUrl)
-    }
-
-    onUploadComplete(pinPosition || undefined)
+    // Don't revoke URL yet - we need it for the result screen
+    // It will be cleaned up when component unmounts or on restart
+    onUploadComplete(imageUrl, pinPosition || undefined)
   }
 
   return (
