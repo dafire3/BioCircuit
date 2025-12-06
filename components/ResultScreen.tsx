@@ -34,16 +34,13 @@ export default function ResultScreen({
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (showRoute && uploadedImageUrl && pinCoordinates && imageRef.current && containerRef.current) {
+    if (showRoute && uploadedImageUrl && pinCoordinates && imageRef.current) {
       const img = imageRef.current
-      const container = containerRef.current
       
-      // Wait for image to load
       const calculateRoute = () => {
         const imgRect = img.getBoundingClientRect()
-        const containerRect = container.getBoundingClientRect()
         
-        // Calculate random edge point relative to image (not container)
+        // Calculate random edge point relative to image
         const edges = [
           { x: 0, y: Math.random() * imgRect.height }, // Left edge
           { x: imgRect.width, y: Math.random() * imgRect.height }, // Right edge
@@ -52,22 +49,15 @@ export default function ResultScreen({
         ]
         const selectedEdge = edges[Math.floor(Math.random() * edges.length)]
         
-        // Pin coordinates are already relative to container, but we need them relative to image
-        // Since image is inside container with padding, we need to adjust
-        const padding = 8 // p-2 = 8px on mobile, 16px on desktop
-        const paddingX = window.innerWidth >= 640 ? 16 : 8
-        const paddingY = window.innerWidth >= 640 ? 16 : 8
-        
-        setEndPoint({
-          x: selectedEdge.x,
-          y: selectedEdge.y,
-        })
+        setEndPoint(selectedEdge)
       }
 
-      if (img.complete) {
+      if (img.complete && img.naturalWidth > 0) {
         calculateRoute()
       } else {
         img.onload = calculateRoute
+        // Fallback in case onload doesn't fire
+        setTimeout(calculateRoute, 100)
       }
     }
   }, [showRoute, uploadedImageUrl, pinCoordinates])
@@ -130,7 +120,7 @@ export default function ResultScreen({
 
             {/* Route visualization */}
             <AnimatePresence>
-              {showRoute && uploadedImageUrl && pinCoordinates && endPoint && (
+              {showRoute && uploadedImageUrl && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -147,61 +137,78 @@ export default function ResultScreen({
                       src={uploadedImageUrl}
                       alt="Route visualization"
                       className="w-full h-auto block rounded"
+                      onLoad={() => {
+                        // Recalculate route when image loads
+                        if (pinCoordinates && imageRef.current) {
+                          const img = imageRef.current
+                          const imgRect = img.getBoundingClientRect()
+                          const edges = [
+                            { x: 0, y: Math.random() * imgRect.height },
+                            { x: imgRect.width, y: Math.random() * imgRect.height },
+                            { x: Math.random() * imgRect.width, y: 0 },
+                            { x: Math.random() * imgRect.width, y: imgRect.height },
+                          ]
+                          setEndPoint(edges[Math.floor(Math.random() * edges.length)])
+                        }
+                      }}
                     />
                     {/* SVG overlay for route */}
-                    <svg
-                      className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-none"
-                      style={{ width: 'calc(100% - 1rem)', height: '100%' }}
-                    >
-                      <defs>
-                        <filter id="glow">
-                          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                          <feMerge>
-                            <feMergeNode in="coloredBlur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                          </feMerge>
-                        </filter>
-                      </defs>
-                      {/* Curved path */}
-                      {endPoint && (
-                        <>
-                          <motion.path
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={{ duration: 1.5, ease: 'easeInOut' }}
-                            d={`M ${pinCoordinates.x} ${pinCoordinates.y} Q ${(pinCoordinates.x + endPoint.x) / 2 + (Math.random() - 0.5) * 80} ${(pinCoordinates.y + endPoint.y) / 2 + (Math.random() - 0.5) * 80} ${endPoint.x} ${endPoint.y}`}
-                            stroke="#FF2BA1"
-                            strokeWidth="4"
-                            fill="none"
-                            strokeLinecap="round"
-                            filter="url(#glow)"
-                          />
-                          {/* Start pin */}
-                          <circle
-                            cx={pinCoordinates.x}
-                            cy={pinCoordinates.y}
-                            r="8"
-                            fill="#FF2BA1"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            filter="url(#glow)"
-                          />
-                          {/* End point */}
-                          <motion.circle
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ delay: 1.5, type: 'spring' }}
-                            cx={endPoint.x}
-                            cy={endPoint.y}
-                            r="10"
-                            fill="#FFC738"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            filter="url(#glow)"
-                          />
-                        </>
-                      )}
-                    </svg>
+                    {pinCoordinates && endPoint && imageRef.current && (
+                      <svg
+                        className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-none"
+                        width={imageRef.current.offsetWidth}
+                        height={imageRef.current.offsetHeight}
+                        style={{ 
+                          width: imageRef.current.offsetWidth || '100%', 
+                          height: imageRef.current.offsetHeight || '100%' 
+                        }}
+                      >
+                        <defs>
+                          <filter id="glow">
+                            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                            <feMerge>
+                              <feMergeNode in="coloredBlur"/>
+                              <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                          </filter>
+                        </defs>
+                        {/* Curved path */}
+                        <motion.path
+                          initial={{ pathLength: 0 }}
+                          animate={{ pathLength: 1 }}
+                          transition={{ duration: 1.5, ease: 'easeInOut' }}
+                          d={`M ${pinCoordinates.x} ${pinCoordinates.y} Q ${(pinCoordinates.x + endPoint.x) / 2 + (Math.random() - 0.5) * 80} ${(pinCoordinates.y + endPoint.y) / 2 + (Math.random() - 0.5) * 80} ${endPoint.x} ${endPoint.y}`}
+                          stroke="#FF2BA1"
+                          strokeWidth="4"
+                          fill="none"
+                          strokeLinecap="round"
+                          filter="url(#glow)"
+                        />
+                        {/* Start pin */}
+                        <circle
+                          cx={pinCoordinates.x}
+                          cy={pinCoordinates.y}
+                          r="8"
+                          fill="#FF2BA1"
+                          stroke="#FFFFFF"
+                          strokeWidth="2"
+                          filter="url(#glow)"
+                        />
+                        {/* End point */}
+                        <motion.circle
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: 1.5, type: 'spring' }}
+                          cx={endPoint.x}
+                          cy={endPoint.y}
+                          r="10"
+                          fill="#FFC738"
+                          stroke="#FFFFFF"
+                          strokeWidth="2"
+                          filter="url(#glow)"
+                        />
+                      </svg>
+                    )}
                   </div>
                 </motion.div>
               )}
