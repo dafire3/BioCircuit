@@ -157,10 +157,10 @@ export default function QuestionWizard({ onComplete }: QuestionWizardProps) {
 
             {/* Input area */}
             {currentQuestion.type === 'text' ? (
-              <div className="relative w-full" style={{ minHeight: '40px' }}>
+              <div className="relative w-full py-2">
                 {/* Underline */}
                 <div
-                  className="absolute top-1/2 left-0 h-px w-full transition-colors duration-300"
+                  className="absolute top-1/2 left-0 h-px w-full transition-colors duration-300 z-0"
                   style={{ backgroundColor: lineColor, transform: 'translateY(-50%)' }}
                 />
                 {/* Input field - positioned on the line */}
@@ -170,15 +170,20 @@ export default function QuestionWizard({ onComplete }: QuestionWizardProps) {
                   value={currentAnswer}
                   onChange={(e) => handleAnswerChange(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="absolute top-1/2 left-0 w-full bg-transparent border-none outline-none text-white text-lg sm:text-xl md:text-2xl text-center focus:outline-none focus:ring-0 placeholder-white/30"
+                  className="relative w-full bg-transparent border-none outline-none text-white text-lg sm:text-xl md:text-2xl text-center focus:outline-none focus:ring-0 z-10"
                   style={{
-                    transform: 'translateY(-50%)',
                     padding: 0,
-                    lineHeight: 'normal',
+                    lineHeight: '1',
                   }}
                   placeholder=""
                   autoFocus
                 />
+                {/* Enter hint */}
+                {!currentAnswer && (
+                  <div className="absolute top-full right-0 mt-2 text-xs text-white/40 pointer-events-none">
+                    Press Enter to continue
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center mt-6 sm:mt-8 px-4">
