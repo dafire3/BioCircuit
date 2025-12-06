@@ -154,62 +154,55 @@ export default function ResultScreen({
                     />
                     {/* SVG overlay for route */}
                     {pinCoordinates && endPoint && imageRef.current && (() => {
-                      // Generate multiple squiggly paths
-                      const generateSquigglyPath = (startX: number, startY: number, endX: number, endY: number) => {
-                        const numPoints = 15 + Math.floor(Math.random() * 10) // 15-25 points
-                        const points: { x: number; y: number }[] = []
+                      const startX = pinCoordinates.x
+                      const startY = pinCoordinates.y
+                      const endX = endPoint.x
+                      const endY = endPoint.y
+                      
+                      // Create 1-2 subtle turning points
+                      const numTurns = 1 + Math.floor(Math.random() * 2) // 1 or 2 turns
+                      const turns: { x: number; y: number }[] = []
+                      
+                      for (let i = 0; i < numTurns; i++) {
+                        const t = 0.3 + (i + 1) * (0.4 / (numTurns + 1)) // Distribute turns along path
+                        const baseX = startX + (endX - startX) * t
+                        const baseY = startY + (endY - startY) * t
                         
-                        // Start point
-                        points.push({ x: startX, y: startY })
+                        // Subtle offset perpendicular to the path direction
+                        const dx = endX - startX
+                        const dy = endY - startY
+                        const length = Math.sqrt(dx * dx + dy * dy)
+                        const perpX = -dy / length
+                        const perpY = dx / length
                         
-                        // Generate intermediate points with randomness
-                        for (let i = 1; i < numPoints - 1; i++) {
-                          const t = i / (numPoints - 1)
-                          const baseX = startX + (endX - startX) * t
-                          const baseY = startY + (endY - startY) * t
-                          
-                          // Add random offset for squiggles
-                          const offsetX = (Math.random() - 0.5) * 60
-                          const offsetY = (Math.random() - 0.5) * 60
-                          
-                          points.push({
-                            x: baseX + offsetX,
-                            y: baseY + offsetY,
-                          })
-                        }
+                        // Small offset (15-30px) for realistic turn
+                        const offset = 15 + Math.random() * 15
+                        const offsetX = perpX * offset * (Math.random() > 0.5 ? 1 : -1)
+                        const offsetY = perpY * offset * (Math.random() > 0.5 ? 1 : -1)
                         
-                        // End point
-                        points.push({ x: endX, y: endY })
-                        
-                        // Create smooth path using quadratic curves
-                        let path = `M ${points[0].x} ${points[0].y}`
-                        for (let i = 1; i < points.length; i++) {
-                          const prev = points[i - 1]
-                          const curr = points[i]
-                          const next = points[i + 1] || curr
-                          
-                          const cpX = curr.x + (next.x - prev.x) * 0.2
-                          const cpY = curr.y + (next.y - prev.y) * 0.2
-                          
-                          path += ` Q ${cpX} ${cpY} ${curr.x} ${curr.y}`
-                        }
-                        
-                        return path
+                        turns.push({
+                          x: baseX + offsetX,
+                          y: baseY + offsetY,
+                        })
                       }
                       
-                      const mainPath = generateSquigglyPath(pinCoordinates.x, pinCoordinates.y, endPoint.x, endPoint.y)
+                      // Build smooth path with turns
+                      let path = `M ${startX} ${startY}`
                       
-                      // Generate 2-3 branch paths that fade out
-                      const branches: string[] = []
-                      for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
-                        const branchStartT = 0.3 + Math.random() * 0.4 // Start somewhere in middle
-                        const branchStartX = pinCoordinates.x + (endPoint.x - pinCoordinates.x) * branchStartT
-                        const branchStartY = pinCoordinates.y + (endPoint.y - pinCoordinates.y) * branchStartT
-                        
-                        const branchEndX = branchStartX + (Math.random() - 0.5) * 150
-                        const branchEndY = branchStartY + (Math.random() - 0.5) * 150
-                        
-                        branches.push(generateSquigglyPath(branchStartX, branchStartY, branchEndX, branchEndY))
+                      if (turns.length === 1) {
+                        // Single turn - use quadratic curve
+                        path += ` Q ${turns[0].x} ${turns[0].y} ${endX} ${endY}`
+                      } else if (turns.length === 2) {
+                        // Two turns - use smooth cubic bezier
+                        const midX = (turns[0].x + turns[1].x) / 2
+                        const midY = (turns[0].y + turns[1].y) / 2
+                        path += ` Q ${turns[0].x} ${turns[0].y} ${midX} ${midY}`
+                        path += ` Q ${turns[1].x} ${turns[1].y} ${endX} ${endY}`
+                      } else {
+                        // Fallback - straight line with slight curve
+                        const midX = (startX + endX) / 2
+                        const midY = (startY + endY) / 2
+                        path += ` Q ${midX} ${midY} ${endX} ${endY}`
                       }
                       
                       return (
@@ -224,7 +217,7 @@ export default function ResultScreen({
                         >
                           <defs>
                             <filter id="glow">
-                              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                              <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
                               <feMerge>
                                 <feMergeNode in="coloredBlur"/>
                                 <feMergeNode in="SourceGraphic"/>
@@ -232,28 +225,12 @@ export default function ResultScreen({
                             </filter>
                           </defs>
                           
-                          {/* Branch paths (fade out) */}
-                          {branches.map((branchPath, idx) => (
-                            <motion.path
-                              key={`branch-${idx}`}
-                              initial={{ pathLength: 0, opacity: 0 }}
-                              animate={{ pathLength: 0.6 + Math.random() * 0.3, opacity: 0.3 }}
-                              transition={{ duration: 1 + Math.random(), delay: 0.5 + idx * 0.3, ease: 'easeInOut' }}
-                              d={branchPath}
-                              stroke="#FF2BA1"
-                              strokeWidth="1.5"
-                              fill="none"
-                              strokeLinecap="round"
-                              strokeOpacity="0.4"
-                            />
-                          ))}
-                          
                           {/* Main path */}
                           <motion.path
                             initial={{ pathLength: 0 }}
                             animate={{ pathLength: 1 }}
-                            transition={{ duration: 2, ease: 'easeInOut' }}
-                            d={mainPath}
+                            transition={{ duration: 1.5, ease: 'easeInOut' }}
+                            d={path}
                             stroke="#FF2BA1"
                             strokeWidth="2"
                             fill="none"
@@ -263,8 +240,8 @@ export default function ResultScreen({
                           
                           {/* Start pin */}
                           <circle
-                            cx={pinCoordinates.x}
-                            cy={pinCoordinates.y}
+                            cx={startX}
+                            cy={startY}
                             r="6"
                             fill="#FF2BA1"
                             stroke="#FFFFFF"
@@ -276,9 +253,9 @@ export default function ResultScreen({
                           <motion.circle
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            transition={{ delay: 2, type: 'spring' }}
-                            cx={endPoint.x}
-                            cy={endPoint.y}
+                            transition={{ delay: 1.5, type: 'spring' }}
+                            cx={endX}
+                            cy={endY}
                             r="8"
                             fill="#FFC738"
                             stroke="#FFFFFF"
