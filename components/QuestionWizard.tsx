@@ -157,11 +157,11 @@ export default function QuestionWizard({ onComplete }: QuestionWizardProps) {
 
             {/* Input area */}
             {currentQuestion.type === 'text' ? (
-              <div className="relative w-full">
+              <div className="relative w-full" style={{ minHeight: '40px' }}>
                 {/* Underline */}
                 <div
-                  className="h-px w-full transition-colors duration-300"
-                  style={{ backgroundColor: lineColor }}
+                  className="absolute top-1/2 left-0 h-px w-full transition-colors duration-300"
+                  style={{ backgroundColor: lineColor, transform: 'translateY(-50%)' }}
                 />
                 {/* Input field - positioned on the line */}
                 <input
@@ -170,10 +170,11 @@ export default function QuestionWizard({ onComplete }: QuestionWizardProps) {
                   value={currentAnswer}
                   onChange={(e) => handleAnswerChange(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="absolute inset-0 w-full bg-transparent border-none outline-none text-white text-lg sm:text-xl md:text-2xl text-center focus:outline-none focus:ring-0 placeholder-white/30"
+                  className="absolute top-1/2 left-0 w-full bg-transparent border-none outline-none text-white text-lg sm:text-xl md:text-2xl text-center focus:outline-none focus:ring-0 placeholder-white/30"
                   style={{
-                    lineHeight: '1px',
                     transform: 'translateY(-50%)',
+                    padding: 0,
+                    lineHeight: 'normal',
                   }}
                   placeholder=""
                   autoFocus
