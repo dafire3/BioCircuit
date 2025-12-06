@@ -153,62 +153,141 @@ export default function ResultScreen({
                       }}
                     />
                     {/* SVG overlay for route */}
-                    {pinCoordinates && endPoint && imageRef.current && (
-                      <svg
-                        className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-none"
-                        width={imageRef.current.offsetWidth}
-                        height={imageRef.current.offsetHeight}
-                        style={{ 
-                          width: imageRef.current.offsetWidth || '100%', 
-                          height: imageRef.current.offsetHeight || '100%' 
-                        }}
-                      >
-                        <defs>
-                          <filter id="glow">
-                            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                            <feMerge>
-                              <feMergeNode in="coloredBlur"/>
-                              <feMergeNode in="SourceGraphic"/>
-                            </feMerge>
-                          </filter>
-                        </defs>
-                        {/* Curved path */}
-                        <motion.path
-                          initial={{ pathLength: 0 }}
-                          animate={{ pathLength: 1 }}
-                          transition={{ duration: 1.5, ease: 'easeInOut' }}
-                          d={`M ${pinCoordinates.x} ${pinCoordinates.y} Q ${(pinCoordinates.x + endPoint.x) / 2 + (Math.random() - 0.5) * 80} ${(pinCoordinates.y + endPoint.y) / 2 + (Math.random() - 0.5) * 80} ${endPoint.x} ${endPoint.y}`}
-                          stroke="#FF2BA1"
-                          strokeWidth="4"
-                          fill="none"
-                          strokeLinecap="round"
-                          filter="url(#glow)"
-                        />
-                        {/* Start pin */}
-                        <circle
-                          cx={pinCoordinates.x}
-                          cy={pinCoordinates.y}
-                          r="8"
-                          fill="#FF2BA1"
-                          stroke="#FFFFFF"
-                          strokeWidth="2"
-                          filter="url(#glow)"
-                        />
-                        {/* End point */}
-                        <motion.circle
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ delay: 1.5, type: 'spring' }}
-                          cx={endPoint.x}
-                          cy={endPoint.y}
-                          r="10"
-                          fill="#FFC738"
-                          stroke="#FFFFFF"
-                          strokeWidth="2"
-                          filter="url(#glow)"
-                        />
-                      </svg>
-                    )}
+                    {pinCoordinates && endPoint && imageRef.current && (() => {
+                      // Generate multiple squiggly paths
+                      const generateSquigglyPath = (startX: number, startY: number, endX: number, endY: number) => {
+                        const numPoints = 15 + Math.floor(Math.random() * 10) // 15-25 points
+                        const points: { x: number; y: number }[] = []
+                        
+                        // Start point
+                        points.push({ x: startX, y: startY })
+                        
+                        // Generate intermediate points with randomness
+                        for (let i = 1; i < numPoints - 1; i++) {
+                          const t = i / (numPoints - 1)
+                          const baseX = startX + (endX - startX) * t
+                          const baseY = startY + (endY - startY) * t
+                          
+                          // Add random offset for squiggles
+                          const offsetX = (Math.random() - 0.5) * 60
+                          const offsetY = (Math.random() - 0.5) * 60
+                          
+                          points.push({
+                            x: baseX + offsetX,
+                            y: baseY + offsetY,
+                          })
+                        }
+                        
+                        // End point
+                        points.push({ x: endX, y: endY })
+                        
+                        // Create smooth path using quadratic curves
+                        let path = `M ${points[0].x} ${points[0].y}`
+                        for (let i = 1; i < points.length; i++) {
+                          const prev = points[i - 1]
+                          const curr = points[i]
+                          const next = points[i + 1] || curr
+                          
+                          const cpX = curr.x + (next.x - prev.x) * 0.2
+                          const cpY = curr.y + (next.y - prev.y) * 0.2
+                          
+                          path += ` Q ${cpX} ${cpY} ${curr.x} ${curr.y}`
+                        }
+                        
+                        return path
+                      }
+                      
+                      const mainPath = generateSquigglyPath(pinCoordinates.x, pinCoordinates.y, endPoint.x, endPoint.y)
+                      
+                      // Generate 2-3 branch paths that fade out
+                      const branches: string[] = []
+                      for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+                        const branchStartT = 0.3 + Math.random() * 0.4 // Start somewhere in middle
+                        const branchStartX = pinCoordinates.x + (endPoint.x - pinCoordinates.x) * branchStartT
+                        const branchStartY = pinCoordinates.y + (endPoint.y - pinCoordinates.y) * branchStartT
+                        
+                        const branchEndX = branchStartX + (Math.random() - 0.5) * 150
+                        const branchEndY = branchStartY + (Math.random() - 0.5) * 150
+                        
+                        branches.push(generateSquigglyPath(branchStartX, branchStartY, branchEndX, branchEndY))
+                      }
+                      
+                      return (
+                        <svg
+                          className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-none"
+                          width={imageRef.current.offsetWidth}
+                          height={imageRef.current.offsetHeight}
+                          style={{ 
+                            width: imageRef.current.offsetWidth || '100%', 
+                            height: imageRef.current.offsetHeight || '100%' 
+                          }}
+                        >
+                          <defs>
+                            <filter id="glow">
+                              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                              <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                              </feMerge>
+                            </filter>
+                          </defs>
+                          
+                          {/* Branch paths (fade out) */}
+                          {branches.map((branchPath, idx) => (
+                            <motion.path
+                              key={`branch-${idx}`}
+                              initial={{ pathLength: 0, opacity: 0 }}
+                              animate={{ pathLength: 0.6 + Math.random() * 0.3, opacity: 0.3 }}
+                              transition={{ duration: 1 + Math.random(), delay: 0.5 + idx * 0.3, ease: 'easeInOut' }}
+                              d={branchPath}
+                              stroke="#FF2BA1"
+                              strokeWidth="1.5"
+                              fill="none"
+                              strokeLinecap="round"
+                              strokeOpacity="0.4"
+                            />
+                          ))}
+                          
+                          {/* Main path */}
+                          <motion.path
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ duration: 2, ease: 'easeInOut' }}
+                            d={mainPath}
+                            stroke="#FF2BA1"
+                            strokeWidth="2"
+                            fill="none"
+                            strokeLinecap="round"
+                            filter="url(#glow)"
+                          />
+                          
+                          {/* Start pin */}
+                          <circle
+                            cx={pinCoordinates.x}
+                            cy={pinCoordinates.y}
+                            r="6"
+                            fill="#FF2BA1"
+                            stroke="#FFFFFF"
+                            strokeWidth="1.5"
+                            filter="url(#glow)"
+                          />
+                          
+                          {/* End point */}
+                          <motion.circle
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ delay: 2, type: 'spring' }}
+                            cx={endPoint.x}
+                            cy={endPoint.y}
+                            r="8"
+                            fill="#FFC738"
+                            stroke="#FFFFFF"
+                            strokeWidth="1.5"
+                            filter="url(#glow)"
+                          />
+                        </svg>
+                      )
+                    })()}
                   </div>
                 </motion.div>
               )}
