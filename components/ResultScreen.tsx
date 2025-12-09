@@ -28,42 +28,61 @@ export default function ResultScreen({
   pinCoordinates,
   onRestart,
 }: ResultScreenProps) {
-  const [showRoute, setShowRoute] = useState(false)
-  const [endPoint, setEndPoint] = useState<{ x: number; y: number } | null>(null)
+  const [showHeatmap, setShowHeatmap] = useState(false)
+  const [heatmapData, setHeatmapData] = useState<number[][]>([])
   const imageRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (showRoute && uploadedImageUrl && pinCoordinates && imageRef.current) {
+    if (showHeatmap && uploadedImageUrl && imageRef.current) {
       const img = imageRef.current
       
-      const calculateRoute = () => {
-        const imgRect = img.getBoundingClientRect()
+      const generateHeatmap = () => {
+        const imgWidth = img.offsetWidth || img.clientWidth
+        const imgHeight = img.offsetHeight || img.clientHeight
         
-        // Calculate random edge point relative to image
-        const edges = [
-          { x: 0, y: Math.random() * imgRect.height }, // Left edge
-          { x: imgRect.width, y: Math.random() * imgRect.height }, // Right edge
-          { x: Math.random() * imgRect.width, y: 0 }, // Top edge
-          { x: Math.random() * imgRect.width, y: imgRect.height }, // Bottom edge
-        ]
-        const selectedEdge = edges[Math.floor(Math.random() * edges.length)]
+        // Create grid - adjust cell size based on image size
+        const cellSize = Math.max(20, Math.min(40, Math.floor(imgWidth / 25)))
+        const cols = Math.ceil(imgWidth / cellSize)
+        const rows = Math.ceil(imgHeight / cellSize)
         
-        setEndPoint(selectedEdge)
+        // Generate random heat values (0-1) for each cell
+        const grid: number[][] = []
+        for (let row = 0; row < rows; row++) {
+          const rowData: number[] = []
+          for (let col = 0; col < cols; col++) {
+            // Higher values near pin if it exists
+            let value = Math.random()
+            if (pinCoordinates) {
+              const cellX = col * cellSize + cellSize / 2
+              const cellY = row * cellSize + cellSize / 2
+              const distX = Math.abs(cellX - pinCoordinates.x)
+              const distY = Math.abs(cellY - pinCoordinates.y)
+              const distance = Math.sqrt(distX * distX + distY * distY)
+              const maxDist = Math.sqrt(imgWidth * imgWidth + imgHeight * imgHeight)
+              // Closer to pin = higher value, but still random
+              const proximityBonus = 1 - (distance / maxDist) * 0.5
+              value = Math.min(1, value * 0.7 + proximityBonus * 0.3)
+            }
+            rowData.push(value)
+          }
+          grid.push(rowData)
+        }
+        
+        setHeatmapData(grid)
       }
 
       if (img.complete && img.naturalWidth > 0) {
-        calculateRoute()
+        generateHeatmap()
       } else {
-        img.onload = calculateRoute
-        // Fallback in case onload doesn't fire
-        setTimeout(calculateRoute, 100)
+        img.onload = generateHeatmap
+        setTimeout(generateHeatmap, 100)
       }
     }
-  }, [showRoute, uploadedImageUrl, pinCoordinates])
+  }, [showHeatmap, uploadedImageUrl, pinCoordinates])
 
   const handleShowRoute = () => {
-    setShowRoute(true)
+    setShowHeatmap(true)
   }
   return (
     <motion.div
@@ -105,8 +124,8 @@ export default function ResultScreen({
               {trainingScore}% you would find an archaeological settlement if you follow the given route
             </motion.p>
 
-            {/* Show route button */}
-            {uploadedImageUrl && pinCoordinates && !showRoute && (
+            {/* Show heatmap button */}
+            {uploadedImageUrl && !showHeatmap && (
               <motion.button
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -114,13 +133,13 @@ export default function ResultScreen({
                 onClick={handleShowRoute}
                 className="px-6 sm:px-8 py-2 sm:py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white/80 hover:text-white text-sm sm:text-base transition-all"
               >
-                Click to see the route
+                Click to see the heatmap
               </motion.button>
             )}
 
-            {/* Route visualization */}
+            {/* Heatmap visualization */}
             <AnimatePresence>
-              {showRoute && uploadedImageUrl && (
+              {showHeatmap && uploadedImageUrl && heatmapData.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -135,136 +154,74 @@ export default function ResultScreen({
                     <img
                       ref={imageRef}
                       src={uploadedImageUrl}
-                      alt="Route visualization"
+                      alt="Heatmap visualization"
                       className="w-full h-auto block rounded"
-                      onLoad={() => {
-                        // Recalculate route when image loads
-                        if (pinCoordinates && imageRef.current) {
-                          const img = imageRef.current
-                          const imgRect = img.getBoundingClientRect()
-                          const edges = [
-                            { x: 0, y: Math.random() * imgRect.height },
-                            { x: imgRect.width, y: Math.random() * imgRect.height },
-                            { x: Math.random() * imgRect.width, y: 0 },
-                            { x: Math.random() * imgRect.width, y: imgRect.height },
-                          ]
-                          setEndPoint(edges[Math.floor(Math.random() * edges.length)])
-                        }
-                      }}
                     />
-                    {/* SVG overlay for route */}
-                    {pinCoordinates && endPoint && imageRef.current && (() => {
-                      const startX = pinCoordinates.x
-                      const startY = pinCoordinates.y
-                      const endX = endPoint.x
-                      const endY = endPoint.y
-                      
-                      // Create 1-2 subtle turning points
-                      const numTurns = 1 + Math.floor(Math.random() * 2) // 1 or 2 turns
-                      const turns: { x: number; y: number }[] = []
-                      
-                      for (let i = 0; i < numTurns; i++) {
-                        const t = 0.3 + (i + 1) * (0.4 / (numTurns + 1)) // Distribute turns along path
-                        const baseX = startX + (endX - startX) * t
-                        const baseY = startY + (endY - startY) * t
-                        
-                        // Subtle offset perpendicular to the path direction
-                        const dx = endX - startX
-                        const dy = endY - startY
-                        const length = Math.sqrt(dx * dx + dy * dy)
-                        const perpX = -dy / length
-                        const perpY = dx / length
-                        
-                        // Small offset (15-30px) for realistic turn
-                        const offset = 15 + Math.random() * 15
-                        const offsetX = perpX * offset * (Math.random() > 0.5 ? 1 : -1)
-                        const offsetY = perpY * offset * (Math.random() > 0.5 ? 1 : -1)
-                        
-                        turns.push({
-                          x: baseX + offsetX,
-                          y: baseY + offsetY,
-                        })
-                      }
-                      
-                      // Build smooth path with turns
-                      let path = `M ${startX} ${startY}`
-                      
-                      if (turns.length === 1) {
-                        // Single turn - use quadratic curve
-                        path += ` Q ${turns[0].x} ${turns[0].y} ${endX} ${endY}`
-                      } else if (turns.length === 2) {
-                        // Two turns - use smooth cubic bezier
-                        const midX = (turns[0].x + turns[1].x) / 2
-                        const midY = (turns[0].y + turns[1].y) / 2
-                        path += ` Q ${turns[0].x} ${turns[0].y} ${midX} ${midY}`
-                        path += ` Q ${turns[1].x} ${turns[1].y} ${endX} ${endY}`
-                      } else {
-                        // Fallback - straight line with slight curve
-                        const midX = (startX + endX) / 2
-                        const midY = (startY + endY) / 2
-                        path += ` Q ${midX} ${midY} ${endX} ${endY}`
-                      }
-                      
-                      return (
-                        <svg
-                          className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-none"
-                          width={imageRef.current.offsetWidth}
-                          height={imageRef.current.offsetHeight}
-                          style={{ 
-                            width: imageRef.current.offsetWidth || '100%', 
-                            height: imageRef.current.offsetHeight || '100%' 
-                          }}
-                        >
-                          <defs>
-                            <filter id="glow">
-                              <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
-                              <feMerge>
-                                <feMergeNode in="coloredBlur"/>
-                                <feMergeNode in="SourceGraphic"/>
-                              </feMerge>
-                            </filter>
-                          </defs>
-                          
-                          {/* Main path */}
-                          <motion.path
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: 1 }}
-                            transition={{ duration: 1.5, ease: 'easeInOut' }}
-                            d={path}
-                            stroke="#FF2BA1"
-                            strokeWidth="2"
-                            fill="none"
-                            strokeLinecap="round"
-                            filter="url(#glow)"
-                          />
-                          
-                          {/* Start pin */}
-                          <circle
-                            cx={startX}
-                            cy={startY}
-                            r="6"
-                            fill="#FF2BA1"
-                            stroke="#FFFFFF"
-                            strokeWidth="1.5"
-                            filter="url(#glow)"
-                          />
-                          
-                          {/* End point */}
-                          <motion.circle
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ delay: 1.5, type: 'spring' }}
-                            cx={endX}
-                            cy={endY}
-                            r="8"
-                            fill="#FFC738"
-                            stroke="#FFFFFF"
-                            strokeWidth="1.5"
-                            filter="url(#glow)"
-                          />
-                        </svg>
-                      )
-                    })()}
+                    {/* Heatmap grid overlay */}
+                    {imageRef.current && (
+                      <div
+                        className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-none"
+                        style={{
+                          width: imageRef.current.offsetWidth || '100%',
+                          height: imageRef.current.offsetHeight || '100%',
+                        }}
+                      >
+                        {heatmapData.map((row, rowIdx) =>
+                          row.map((value, colIdx) => {
+                            const cellSize = Math.max(20, Math.min(40, Math.floor((imageRef.current?.offsetWidth || 500) / 25)))
+                            const opacity = value
+                            const intensity = Math.floor(value * 255)
+                            
+                            return (
+                              <motion.div
+                                key={`${rowIdx}-${colIdx}`}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity }}
+                                transition={{ duration: 0.3, delay: (rowIdx + colIdx) * 0.01 }}
+                                className="absolute"
+                                style={{
+                                  left: `${colIdx * cellSize}px`,
+                                  top: `${rowIdx * cellSize}px`,
+                                  width: `${cellSize}px`,
+                                  height: `${cellSize}px`,
+                                  backgroundColor: `rgba(255, ${255 - intensity}, ${255 - intensity}, ${opacity * 0.6})`,
+                                  border: '0.5px solid rgba(255, 0, 0, 0.1)',
+                                }}
+                              />
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Legend */}
+                    <div className="absolute bottom-4 right-4 bg-background/95 backdrop-blur-sm border border-white/20 rounded-lg px-4 py-3 shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col gap-1">
+                          <div className="h-3 w-8 bg-red-900 rounded"></div>
+                          <div className="h-3 w-8 bg-red-600 rounded"></div>
+                          <div className="h-3 w-8 bg-red-300 rounded"></div>
+                        </div>
+                        <p className="text-xs sm:text-sm text-white/80 font-medium max-w-[120px]">
+                          Darker red = Higher chance
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Pin marker if exists */}
+                    {pinCoordinates && (
+                      <div
+                        className="absolute pointer-events-none z-10"
+                        style={{
+                          left: `${pinCoordinates.x}px`,
+                          top: `${pinCoordinates.y}px`,
+                          transform: 'translate(-50%, -100%)',
+                        }}
+                      >
+                        <div className="w-6 h-6 bg-accent rounded-full border-2 border-white shadow-lg" />
+                        <div className="w-1 h-8 bg-accent mx-auto mt-0.5" />
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
