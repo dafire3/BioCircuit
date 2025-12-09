@@ -237,31 +237,31 @@ export default function ResultScreen({
                           row.map((value, colIdx) => {
                             const cellSize = Math.max(20, Math.min(40, Math.floor((imageRef.current?.offsetWidth || 500) / 25)))
                             
-                            // Map value (0-1) to red shades
-                            // Lower values = lighter red, higher values = darker red
+                            // Map value (0-1) to red shades - all darker
+                            // Lower values = medium red, higher values = very dark red
                             let redValue: number
                             let opacity: number
                             
                             if (value < 0.3) {
-                              // Light red (pink-ish)
-                              redValue = 255
-                              opacity = 0.2 + value * 0.2 // 0.2-0.26
-                            } else if (value < 0.5) {
-                              // Medium-light red
-                              redValue = 255
-                              opacity = 0.3 + (value - 0.3) * 0.3 // 0.3-0.36
-                            } else if (value < 0.7) {
-                              // Medium red
-                              redValue = 220
-                              opacity = 0.4 + (value - 0.5) * 0.3 // 0.4-0.46
-                            } else if (value < 0.85) {
-                              // Dark red
+                              // Medium-dark red
                               redValue = 180
-                              opacity = 0.5 + (value - 0.7) * 0.2 // 0.5-0.53
-                            } else {
+                              opacity = 0.4 + value * 0.2 // 0.4-0.46
+                            } else if (value < 0.5) {
+                              // Dark red
+                              redValue = 150
+                              opacity = 0.5 + (value - 0.3) * 0.2 // 0.5-0.54
+                            } else if (value < 0.7) {
                               // Very dark red
                               redValue = 120
-                              opacity = 0.6 + (value - 0.85) * 0.3 // 0.6-0.645
+                              opacity = 0.6 + (value - 0.5) * 0.15 // 0.6-0.63
+                            } else if (value < 0.85) {
+                              // Extremely dark red
+                              redValue = 90
+                              opacity = 0.65 + (value - 0.7) * 0.2 // 0.65-0.68
+                            } else {
+                              // Darkest red (almost maroon)
+                              redValue = 60
+                              opacity = 0.7 + (value - 0.85) * 0.2 // 0.7-0.73
                             }
                             
                             return (
