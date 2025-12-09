@@ -139,7 +139,7 @@ export default function ResultScreen({
 
             {/* Heatmap visualization */}
             <AnimatePresence>
-              {showHeatmap && uploadedImageUrl && heatmapData.length > 0 && (
+              {showHeatmap && uploadedImageUrl && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -156,9 +156,42 @@ export default function ResultScreen({
                       src={uploadedImageUrl}
                       alt="Heatmap visualization"
                       className="w-full h-auto block rounded"
+                      onLoad={() => {
+                        // Generate heatmap when image loads
+                        if (imageRef.current) {
+                          const img = imageRef.current
+                          const imgWidth = img.offsetWidth || img.clientWidth
+                          const imgHeight = img.offsetHeight || img.clientHeight
+                          
+                          const cellSize = Math.max(20, Math.min(40, Math.floor(imgWidth / 25)))
+                          const cols = Math.ceil(imgWidth / cellSize)
+                          const rows = Math.ceil(imgHeight / cellSize)
+                          
+                          const grid: number[][] = []
+                          for (let row = 0; row < rows; row++) {
+                            const rowData: number[] = []
+                            for (let col = 0; col < cols; col++) {
+                              let value = Math.random()
+                              if (pinCoordinates) {
+                                const cellX = col * cellSize + cellSize / 2
+                                const cellY = row * cellSize + cellSize / 2
+                                const distX = Math.abs(cellX - pinCoordinates.x)
+                                const distY = Math.abs(cellY - pinCoordinates.y)
+                                const distance = Math.sqrt(distX * distX + distY * distY)
+                                const maxDist = Math.sqrt(imgWidth * imgWidth + imgHeight * imgHeight)
+                                const proximityBonus = 1 - (distance / maxDist) * 0.5
+                                value = Math.min(1, value * 0.7 + proximityBonus * 0.3)
+                              }
+                              rowData.push(value)
+                            }
+                            grid.push(rowData)
+                          }
+                          setHeatmapData(grid)
+                        }
+                      }}
                     />
                     {/* Heatmap grid overlay */}
-                    {imageRef.current && (
+                    {imageRef.current && heatmapData.length > 0 && (
                       <div
                         className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-none"
                         style={{
@@ -176,7 +209,7 @@ export default function ResultScreen({
                               <motion.div
                                 key={`${rowIdx}-${colIdx}`}
                                 initial={{ opacity: 0 }}
-                                animate={{ opacity }}
+                                animate={{ opacity: opacity * 0.6 }}
                                 transition={{ duration: 0.3, delay: (rowIdx + colIdx) * 0.01 }}
                                 className="absolute"
                                 style={{
@@ -195,7 +228,7 @@ export default function ResultScreen({
                     )}
                     
                     {/* Legend */}
-                    <div className="absolute bottom-4 right-4 bg-background/95 backdrop-blur-sm border border-white/20 rounded-lg px-4 py-3 shadow-lg">
+                    <div className="absolute bottom-4 right-4 bg-background/95 backdrop-blur-sm border border-white/20 rounded-lg px-4 py-3 shadow-lg z-20">
                       <div className="flex items-center gap-3">
                         <div className="flex flex-col gap-1">
                           <div className="h-3 w-8 bg-red-900 rounded"></div>
