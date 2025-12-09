@@ -121,7 +121,7 @@ export default function ResultScreen({
               transition={{ delay: 0.5 }}
               className="text-sm sm:text-base text-white/60 -mt-4"
             >
-              {trainingScore}% you would find an archaeological settlement if you follow the given route
+              {trainingScore}% you would find an archaeological settlement if you are in the darker area
             </motion.p>
 
             {/* Show heatmap button */}
@@ -167,25 +167,56 @@ export default function ResultScreen({
                           const cols = Math.ceil(imgWidth / cellSize)
                           const rows = Math.ceil(imgHeight / cellSize)
                           
+                          // Create 2-4 hot spot clusters
+                          const numClusters = 2 + Math.floor(Math.random() * 3)
+                          const clusters: { x: number; y: number; intensity: number }[] = []
+                          
+                          for (let i = 0; i < numClusters; i++) {
+                            clusters.push({
+                              x: Math.random() * imgWidth,
+                              y: Math.random() * imgHeight,
+                              intensity: 0.6 + Math.random() * 0.4, // 0.6-1.0
+                            })
+                          }
+                          
+                          // If pin exists, make one cluster near it
+                          if (pinCoordinates) {
+                            clusters[0] = {
+                              x: pinCoordinates.x,
+                              y: pinCoordinates.y,
+                              intensity: 0.8 + Math.random() * 0.2, // 0.8-1.0
+                            }
+                          }
+                          
                           const grid: number[][] = []
                           for (let row = 0; row < rows; row++) {
                             const rowData: number[] = []
                             for (let col = 0; col < cols; col++) {
-                              let value = Math.random()
-                              if (pinCoordinates) {
-                                const cellX = col * cellSize + cellSize / 2
-                                const cellY = row * cellSize + cellSize / 2
-                                const distX = Math.abs(cellX - pinCoordinates.x)
-                                const distY = Math.abs(cellY - pinCoordinates.y)
+                              const cellX = col * cellSize + cellSize / 2
+                              const cellY = row * cellSize + cellSize / 2
+                              
+                              // Calculate value based on distance to nearest cluster
+                              let maxInfluence = 0
+                              for (const cluster of clusters) {
+                                const distX = cellX - cluster.x
+                                const distY = cellY - cluster.y
                                 const distance = Math.sqrt(distX * distX + distY * distY)
-                                const maxDist = Math.sqrt(imgWidth * imgWidth + imgHeight * imgHeight)
-                                const proximityBonus = 1 - (distance / maxDist) * 0.5
-                                value = Math.min(1, value * 0.7 + proximityBonus * 0.3)
+                                
+                                // Influence decreases with distance (Gaussian-like falloff)
+                                const influenceRadius = 80 + Math.random() * 60 // 80-140px
+                                const influence = cluster.intensity * Math.exp(-(distance * distance) / (2 * influenceRadius * influenceRadius))
+                                maxInfluence = Math.max(maxInfluence, influence)
                               }
+                              
+                              // Add some base noise and blend
+                              const baseNoise = 0.2 + Math.random() * 0.3 // 0.2-0.5
+                              const value = Math.min(1, maxInfluence * 0.7 + baseNoise * 0.3)
+                              
                               rowData.push(value)
                             }
                             grid.push(rowData)
                           }
+                          
                           setHeatmapData(grid)
                         }
                       }}
@@ -202,22 +233,47 @@ export default function ResultScreen({
                         {heatmapData.map((row, rowIdx) =>
                           row.map((value, colIdx) => {
                             const cellSize = Math.max(20, Math.min(40, Math.floor((imageRef.current?.offsetWidth || 500) / 25)))
-                            const opacity = value
-                            const intensity = Math.floor(value * 255)
+                            
+                            // Map value (0-1) to red shades
+                            // Lower values = lighter red, higher values = darker red
+                            let redValue: number
+                            let opacity: number
+                            
+                            if (value < 0.3) {
+                              // Light red (pink-ish)
+                              redValue = 255
+                              opacity = 0.2 + value * 0.2 // 0.2-0.26
+                            } else if (value < 0.5) {
+                              // Medium-light red
+                              redValue = 255
+                              opacity = 0.3 + (value - 0.3) * 0.3 // 0.3-0.36
+                            } else if (value < 0.7) {
+                              // Medium red
+                              redValue = 220
+                              opacity = 0.4 + (value - 0.5) * 0.3 // 0.4-0.46
+                            } else if (value < 0.85) {
+                              // Dark red
+                              redValue = 180
+                              opacity = 0.5 + (value - 0.7) * 0.2 // 0.5-0.53
+                            } else {
+                              // Very dark red
+                              redValue = 120
+                              opacity = 0.6 + (value - 0.85) * 0.3 // 0.6-0.645
+                            }
                             
                             return (
                               <motion.div
                                 key={`${rowIdx}-${colIdx}`}
                                 initial={{ opacity: 0 }}
-                                animate={{ opacity: opacity * 0.6 }}
-                                transition={{ duration: 0.3, delay: (rowIdx + colIdx) * 0.01 }}
+                                animate={{ opacity }}
+                                transition={{ duration: 0.3, delay: (rowIdx + colIdx) * 0.005 }}
                                 className="absolute"
                                 style={{
                                   left: `${colIdx * cellSize}px`,
                                   top: `${rowIdx * cellSize}px`,
                                   width: `${cellSize}px`,
                                   height: `${cellSize}px`,
-                                  backgroundColor: `rgba(255, ${255 - intensity}, ${255 - intensity}, ${opacity * 0.6})`,
+                                  backgroundColor: `rgb(${redValue}, 0, 0)`,
                                   border: '0.5px solid rgba(255, 0, 0, 0.1)',
                                 }}
                               />
