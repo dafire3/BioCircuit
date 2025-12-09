@@ -167,25 +167,28 @@ export default function ResultScreen({
                           const cols = Math.ceil(imgWidth / cellSize)
                           const rows = Math.ceil(imgHeight / cellSize)
                           
-                          // Create 2-4 hot spot clusters
-                          const numClusters = 2 + Math.floor(Math.random() * 3)
-                          const clusters: { x: number; y: number; intensity: number }[] = []
+                          // Create 1-2 large concentrated clusters
+                          const numClusters = 1 + Math.floor(Math.random() * 2)
+                          const clusters: { x: number; y: number; intensity: number; radius: number }[] = []
                           
-                          for (let i = 0; i < numClusters; i++) {
+                          // If pin exists, make one cluster centered on it
+                          if (pinCoordinates) {
                             clusters.push({
-                              x: Math.random() * imgWidth,
-                              y: Math.random() * imgHeight,
-                              intensity: 0.6 + Math.random() * 0.4, // 0.6-1.0
+                              x: pinCoordinates.x,
+                              y: pinCoordinates.y,
+                              intensity: 0.85 + Math.random() * 0.15, // 0.85-1.0
+                              radius: 120 + Math.random() * 80, // 120-200px radius
                             })
                           }
                           
-                          // If pin exists, make one cluster near it
-                          if (pinCoordinates) {
-                            clusters[0] = {
-                              x: pinCoordinates.x,
-                              y: pinCoordinates.y,
-                              intensity: 0.8 + Math.random() * 0.2, // 0.8-1.0
-                            }
+                          // Add 0-1 additional random clusters
+                          for (let i = clusters.length; i < numClusters; i++) {
+                            clusters.push({
+                              x: Math.random() * imgWidth,
+                              y: Math.random() * imgHeight,
+                              intensity: 0.7 + Math.random() * 0.3, // 0.7-1.0
+                              radius: 100 + Math.random() * 100, // 100-200px radius
+                            })
                           }
                           
                           const grid: number[][] = []
@@ -202,15 +205,15 @@ export default function ResultScreen({
                                 const distY = cellY - cluster.y
                                 const distance = Math.sqrt(distX * distX + distY * distY)
                                 
-                                // Influence decreases with distance (Gaussian-like falloff)
-                                const influenceRadius = 80 + Math.random() * 60 // 80-140px
-                                const influence = cluster.intensity * Math.exp(-(distance * distance) / (2 * influenceRadius * influenceRadius))
+                                // Smooth Gaussian falloff with larger radius
+                                const sigma = cluster.radius / 2 // Standard deviation
+                                const influence = cluster.intensity * Math.exp(-(distance * distance) / (2 * sigma * sigma))
                                 maxInfluence = Math.max(maxInfluence, influence)
                               }
                               
-                              // Add some base noise and blend
-                              const baseNoise = 0.2 + Math.random() * 0.3 // 0.2-0.5
-                              const value = Math.min(1, maxInfluence * 0.7 + baseNoise * 0.3)
+                              // Add minimal base noise - much less randomization
+                              const baseNoise = 0.15 + Math.random() * 0.15 // 0.15-0.3 (reduced)
+                              const value = Math.min(1, maxInfluence * 0.85 + baseNoise * 0.15)
                               
                               rowData.push(value)
                             }
