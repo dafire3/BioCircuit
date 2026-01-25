@@ -1,13 +1,31 @@
 'use client'
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import type { LatLngLiteral, Map as LeafletMap } from 'leaflet'
 
-const MapContainer = dynamic(() => import('react-leaflet').then((m) => m.MapContainer), { ssr: false })
-const TileLayer = dynamic(() => import('react-leaflet').then((m) => m.TileLayer), { ssr: false })
-const CircleMarker = dynamic(() => import('react-leaflet').then((m) => m.CircleMarker), { ssr: false })
+// Define types locally to avoid leaflet import issues during build
+interface LatLngLiteral {
+  lat: number
+  lng: number
+}
+
+interface LeafletMap {
+  setView(center: LatLngLiteral, zoom?: number, options?: any): this
+  panTo(latlng: LatLngLiteral, options?: any): this
+  flyTo(latlng: LatLngLiteral, zoom?: number, options?: any): this
+  getCenter(): LatLngLiteral
+  getZoom(): number
+  latLngToContainerPoint(latlng: any): { x: number; y: number }
+}
+
+// Dynamic imports for react-leaflet components (SSR disabled)
+// Cast to any to avoid type conflicts with dynamic imports
+const MapContainer: any = dynamic(() => import('react-leaflet').then((m) => m.MapContainer), { ssr: false })
+const TileLayer: any = dynamic(() => import('react-leaflet').then((m) => m.TileLayer), { ssr: false })
+const CircleMarker: any = dynamic(() => import('react-leaflet').then((m) => m.CircleMarker), { ssr: false })
 
 interface ResultScreenProps {
   trainingStarted: boolean

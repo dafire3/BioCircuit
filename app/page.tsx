@@ -1,12 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import type { LatLngLiteral } from 'leaflet'
 import IntroLogo from '@/components/IntroLogo'
 import UploadStep from '@/components/UploadStep'
 import QuestionWizard from '@/components/QuestionWizard'
 import ResultScreen from '@/components/ResultScreen'
 import MiniHeader from '@/components/MiniHeader'
+
+// Define LatLngLiteral locally to avoid leaflet import issues
+interface LatLngLiteral {
+  lat: number
+  lng: number
+}
 
 type Step = 'intro' | 'upload' | 'questions' | 'result'
 
