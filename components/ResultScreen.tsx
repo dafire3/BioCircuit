@@ -255,6 +255,9 @@ function SlimeMoldSimulation() {
   const centerX = 200  // Horizontal center of the SVG
   const baseY = 220    // Y-coordinate of the ground line (where poles start)
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER - SVG Visualization
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -266,12 +269,18 @@ function SlimeMoldSimulation() {
         Slime Mold Path Selection
       </h3>
       <div className="relative bg-black/20 border border-white/10 rounded-xl p-4">
+        {/* 
+          SVG Canvas - 400x260 viewBox
+          The viewBox scales responsively while maintaining aspect ratio
+        */}
         <svg
           viewBox="0 0 400 260"
           className="w-full h-auto"
           style={{ maxHeight: '300px' }}
         >
-          {/* Ground line */}
+          {/* ─────────────────────────────────────────────────────────────────
+              GROUND LINE - Horizontal base where both poles are anchored
+          ───────────────────────────────────────────────────────────────── */}
           <line
             x1="50"
             y1={baseY}
@@ -281,7 +290,10 @@ function SlimeMoldSimulation() {
             strokeWidth="2"
           />
 
-          {/* Left pole */}
+          {/* ─────────────────────────────────────────────────────────────────
+              LEFT POLE - Leans to the left (negative angle)
+              Highlights pink when chosen and animation is complete
+          ───────────────────────────────────────────────────────────────── */}
           <motion.line
             x1={centerX - POLE_GAP / 2}
             y1={baseY}
@@ -295,7 +307,10 @@ function SlimeMoldSimulation() {
             transition={{ duration: 0.6 }}
           />
 
-          {/* Right pole */}
+          {/* ─────────────────────────────────────────────────────────────────
+              RIGHT POLE - Leans to the right (positive angle)
+              Highlights pink when chosen and animation is complete
+          ───────────────────────────────────────────────────────────────── */}
           <motion.line
             x1={centerX + POLE_GAP / 2}
             y1={baseY}
@@ -309,7 +324,11 @@ function SlimeMoldSimulation() {
             transition={{ duration: 0.6 }}
           />
 
-          {/* Angle labels - always show positive */}
+          {/* ─────────────────────────────────────────────────────────────────
+              ANGLE LABELS - Display the angle of each pole
+              Always shows positive values (absolute value)
+              Positioned at the midpoint of each pole
+          ───────────────────────────────────────────────────────────────── */}
           <text
             x={centerX - POLE_GAP / 2 + leftPoleEnd.x / 2 - 25}
             y={baseY + leftPoleEnd.y / 2}
@@ -331,7 +350,11 @@ function SlimeMoldSimulation() {
             {Math.abs(rightAngle)}°
           </text>
 
-          {/* Base slime blob */}
+          {/* ─────────────────────────────────────────────────────────────────
+              BASE SLIME BLOB - The main body of the slime mold at ground level
+              - Yellow/gold color (#FFC738) representing the organism
+              - Shrinks and fades when animation completes (mass moved to chosen pole)
+          ───────────────────────────────────────────────────────────────── */}
           <motion.ellipse
             cx={centerX}
             cy={baseY + 5}
@@ -347,7 +370,11 @@ function SlimeMoldSimulation() {
             transition={{ duration: 0.5 }}
           />
 
-          {/* Left slime tendril */}
+          {/* ─────────────────────────────────────────────────────────────────
+              LEFT SLIME TENDRIL - The exploring "arm" climbing the left pole
+              - Size grows as it climbs higher (more mass committed to this path)
+              - Disappears when retracted (slimePositions.left = 0)
+          ───────────────────────────────────────────────────────────────── */}
           {slimePositions.left > 0 && (
             <motion.circle
               cx={centerX - POLE_GAP / 2 + leftSlimePos.x}
@@ -362,7 +389,10 @@ function SlimeMoldSimulation() {
             />
           )}
 
-          {/* Right slime tendril */}
+          {/* ─────────────────────────────────────────────────────────────────
+              RIGHT SLIME TENDRIL - The exploring "arm" climbing the right pole
+              - Same behavior as left tendril but on the right pole
+          ───────────────────────────────────────────────────────────────── */}
           {slimePositions.right > 0 && (
             <motion.circle
               cx={centerX + POLE_GAP / 2 + rightSlimePos.x}
@@ -377,7 +407,11 @@ function SlimeMoldSimulation() {
             />
           )}
 
-          {/* Connection lines from base to climbing slimes */}
+          {/* ─────────────────────────────────────────────────────────────────
+              CONNECTION LINES - Visual connection between base blob and tendrils
+              - Shows the "veins" of the slime mold network
+              - Only visible while climbing (disappears when tendril reaches 100%)
+          ───────────────────────────────────────────────────────────────── */}
           {slimePositions.left > 0 && slimePositions.left < 100 && (
             <line
               x1={centerX - POLE_GAP / 4}
