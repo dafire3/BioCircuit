@@ -2,13 +2,19 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect, useRef } from 'react'
+import dynamic from 'next/dynamic'
+import type { LatLngLiteral, Map as LeafletMap } from 'leaflet'
+
+const MapContainer = dynamic(() => import('react-leaflet').then((m) => m.MapContainer), { ssr: false })
+const TileLayer = dynamic(() => import('react-leaflet').then((m) => m.TileLayer), { ssr: false })
+const CircleMarker = dynamic(() => import('react-leaflet').then((m) => m.CircleMarker), { ssr: false })
 
 interface ResultScreenProps {
   trainingStarted: boolean
   trainingScore: number | null
   answers: Record<string, string>
-  uploadedImageUrl: string | null
-  pinCoordinates: { x: number; y: number } | null
+  mapView: { center: LatLngLiteral; zoom: number } | null
+  pinCoordinates: LatLngLiteral | null
   onRestart: () => void
 }
 
@@ -20,66 +26,501 @@ const QUESTION_LABELS: Record<string, string> = {
   'start-training': 'Training decision',
 }
 
+const DEFAULT_CENTER: LatLngLiteral = { lat: 39.8283, lng: -98.5795 }
+const DEFAULT_ZOOM = 4
+
+/**
+ * ============================================================================
+ * SLIME MOLD POLE SIMULATION COMPONENT
+ * ============================================================================
+ * 
+ * This component simulates how slime mold (Physarum polycephalum) finds the
+ * most efficient path when exploring its environment.
+ * 
+ * HOW SLIME MOLD WORKS IN NATURE:
+ * - Slime mold is a single-celled organism that spreads in ALL directions
+ *   when searching for food
+ * - Once it finds the optimal path, it RETRACTS from inefficient routes
+ *   and focuses all its mass on the best path
+ * - This behavior inspired algorithms used in network optimization!
+ * 
+ * HOW THIS SIMULATION WORKS:
+ * 1. Two poles are displayed at different angles (forming a V-shape)
+ * 2. The slime mold starts at the base and explores BOTH poles simultaneously
+ * 3. After climbing 25% of each pole, it evaluates which path is easier
+ * 4. The slime then commits fully to the easier path (higher angle = less steep)
+ *    while retracting from the harder path
+ * 
+ * WHY HIGHER ANGLE = EASIER CLIMB:
+ * - A vertical pole (0°) would be the hardest to climb (straight up)
+ * - A more tilted pole (45°) is easier because it's closer to horizontal
+ * - The slime mold naturally chooses the path of least resistance
+ * 
+ * ============================================================================
+ */
+function SlimeMoldSimulation() {
+  // ─────────────────────────────────────────────────────────────────────────
+  // STATE MANAGEMENT
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  // Angles for each pole (in degrees). Left pole uses negative angle to lean left.
+  const [leftAngle, setLeftAngle] = useState(0)
+  const [rightAngle, setRightAngle] = useState(0)
+  
+  // Animation phases: idle → climbing → choosing → done
+  // - idle: Waiting to start
+  // - climbing: Slime explores both poles up to 25%
+  // - choosing: Slime commits to easier pole, retracts from harder one
+  // - done: Animation complete, show results
+  const [animationPhase, setAnimationPhase] = useState<'idle' | 'climbing' | 'choosing' | 'done'>('idle')
+  
+  // Progress of slime on each pole (0-100%)
+  const [slimePositions, setSlimePositions] = useState({ left: 0, right: 0 })
+  
+  // Which pole the slime will choose (determined by angle comparison)
+  const [chosenPole, setChosenPole] = useState<'left' | 'right' | null>(null)
+  
+  // Prevents re-randomizing angles on restart
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CONSTANTS
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  const POLE_LENGTH = 180 // Length of each pole in pixels
+  const POLE_GAP = 150    // Horizontal distance between pole bases in pixels
+  const SLIME_RADIUS = 12 // Base radius of slime blob in pixels
+
+  // Predefined "cool" angles that create visually dramatic differences
+  // These are carefully chosen to be distinct and easy to compare
+  const COOL_ANGLES = [15, 22, 30, 38, 45]
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // INITIALIZATION - Generate random angles (runs once on mount)
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isInitialized) {
+      // Shuffle the cool angles array and pick the first two
+      // This ensures we always get two DIFFERENT angles
+      const shuffled = [...COOL_ANGLES].sort(() => Math.random() - 0.5)
+      const leftA = shuffled[0]
+      const rightA = shuffled[1]
+      
+      // Left pole leans LEFT (negative angle in our coordinate system)
+      // Right pole leans RIGHT (positive angle)
+      // This creates a V-shape opening outward
+      setLeftAngle(-leftA)
+      setRightAngle(rightA)
+
+      // DECISION LOGIC: Higher angle = more tilted = less steep = easier to climb
+      // The slime mold will choose the pole with the HIGHER angle
+      setChosenPole(leftA >= rightA ? 'left' : 'right')
+      
+      setIsInitialized(true)
+    }
+  }, [isInitialized])
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // START ANIMATION - Triggered after initialization
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isInitialized && animationPhase === 'idle') {
+      // Wait 1 second before starting the climbing animation
+      // This gives the user time to see the initial state
+      const timer = setTimeout(() => {
+        setAnimationPhase('climbing')
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [isInitialized, animationPhase])
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RESTART FUNCTION - Replays animation with SAME angles
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleRestart = () => {
+    // Reset slime positions to starting point
+    setSlimePositions({ left: 0, right: 0 })
+    // Go back to idle phase (will trigger climbing after 1 second)
+    setAnimationPhase('idle')
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE 1: CLIMBING - Slime explores both poles simultaneously
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (animationPhase === 'climbing') {
+      // Animate slime climbing both poles until reaching 25%
+      // This simulates the slime mold's initial exploration phase
+      const interval = setInterval(() => {
+        setSlimePositions((prev) => {
+          // Increment both positions by 0.8% per tick (slow, visible movement)
+          const newLeft = Math.min(prev.left + 0.8, 25)
+          const newRight = Math.min(prev.right + 0.8, 25)
+          
+          // Once both reach 25%, stop and transition to choosing phase
+          if (newLeft >= 25 && newRight >= 25) {
+            clearInterval(interval)
+            // Wait 800ms before starting the choosing phase
+            // This pause lets the user see that both paths were explored equally
+            setTimeout(() => setAnimationPhase('choosing'), 800)
+          }
+          
+          return { left: newLeft, right: newRight }
+        })
+      }, 60) // Run every 60ms for smooth animation
+      
+      return () => clearInterval(interval)
+    }
+  }, [animationPhase])
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE 2: CHOOSING - Slime commits to easier pole, retracts from harder
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (animationPhase === 'choosing') {
+      // Simultaneously:
+      // - Advance the slime on the chosen (easier) pole toward 100%
+      // - Retract the slime from the rejected pole back to 0%
+      const interval = setInterval(() => {
+        setSlimePositions((prev) => {
+          // Get current progress on each pole based on which was chosen
+          const chosenProgress = chosenPole === 'left' ? prev.left : prev.right
+          const otherProgress = chosenPole === 'left' ? prev.right : prev.left
+
+          // Move forward on chosen pole (+1.2% per tick)
+          // Retract from rejected pole (-1.5% per tick, slightly faster)
+          let newChosen = Math.min(chosenProgress + 1.2, 100)
+          let newOther = Math.max(otherProgress - 1.5, 0)
+
+          // Animation complete when chosen reaches top and other fully retracted
+          if (newChosen >= 100 && newOther <= 0) {
+            clearInterval(interval)
+            // Wait 500ms before showing final "done" state
+            setTimeout(() => setAnimationPhase('done'), 500)
+          }
+
+          // Return updated positions in the correct order
+          return chosenPole === 'left'
+            ? { left: newChosen, right: newOther }
+            : { left: newOther, right: newChosen }
+        })
+      }, 50) // Run every 50ms for smooth animation
+      
+      return () => clearInterval(interval)
+    }
+  }, [animationPhase, chosenPole])
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // GEOMETRY CALCULATIONS
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  /**
+   * Calculate the endpoint of a pole given its angle
+   * Uses trigonometry to convert angle + length into x,y coordinates
+   * 
+   * @param angle - Angle in degrees (negative = lean left, positive = lean right)
+   * @returns {x, y} - Endpoint position relative to the pole's base
+   */
+  const getPoleEnd = (angle: number) => {
+    const radians = (angle * Math.PI) / 180
+    return {
+      x: Math.sin(radians) * POLE_LENGTH,        // Horizontal offset
+      y: -Math.cos(radians) * POLE_LENGTH,       // Vertical offset (negative because SVG Y-axis is inverted)
+    }
+  }
+
+  /**
+   * Calculate the position of slime on a pole at a given progress percentage
+   * 
+   * @param angle - Angle of the pole in degrees
+   * @param progress - How far up the pole (0-100%)
+   * @returns {x, y} - Position of slime blob relative to pole base
+   */
+  const getSlimePos = (angle: number, progress: number) => {
+    const radians = (angle * Math.PI) / 180
+    const distance = (progress / 100) * POLE_LENGTH
+    return {
+      x: Math.sin(radians) * distance,
+      y: -Math.cos(radians) * distance,
+    }
+  }
+
+  // Pre-calculate pole endpoints and current slime positions
+  const leftPoleEnd = getPoleEnd(leftAngle)
+  const rightPoleEnd = getPoleEnd(rightAngle)
+  const leftSlimePos = getSlimePos(leftAngle, slimePositions.left)
+  const rightSlimePos = getSlimePos(rightAngle, slimePositions.right)
+
+  // SVG coordinate system constants
+  const centerX = 200  // Horizontal center of the SVG
+  const baseY = 220    // Y-coordinate of the ground line (where poles start)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+      className="w-full max-w-md mx-auto mt-8 sm:mt-12"
+    >
+      <h3 className="text-center text-white/60 text-sm sm:text-base mb-4 font-medium">
+        Slime Mold Path Selection
+      </h3>
+      <div className="relative bg-black/20 border border-white/10 rounded-xl p-4">
+        <svg
+          viewBox="0 0 400 260"
+          className="w-full h-auto"
+          style={{ maxHeight: '300px' }}
+        >
+          {/* Ground line */}
+          <line
+            x1="50"
+            y1={baseY}
+            x2="350"
+            y2={baseY}
+            stroke="rgba(255,255,255,0.3)"
+            strokeWidth="2"
+          />
+
+          {/* Left pole */}
+          <motion.line
+            x1={centerX - POLE_GAP / 2}
+            y1={baseY}
+            x2={centerX - POLE_GAP / 2 + leftPoleEnd.x}
+            y2={baseY + leftPoleEnd.y}
+            stroke={chosenPole === 'left' && animationPhase === 'done' ? '#FF2BA1' : 'rgba(255,255,255,0.7)'}
+            strokeWidth="4"
+            strokeLinecap="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.6 }}
+          />
+
+          {/* Right pole */}
+          <motion.line
+            x1={centerX + POLE_GAP / 2}
+            y1={baseY}
+            x2={centerX + POLE_GAP / 2 + rightPoleEnd.x}
+            y2={baseY + rightPoleEnd.y}
+            stroke={chosenPole === 'right' && animationPhase === 'done' ? '#FF2BA1' : 'rgba(255,255,255,0.7)'}
+            strokeWidth="4"
+            strokeLinecap="round"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.6 }}
+          />
+
+          {/* Angle labels - always show positive */}
+          <text
+            x={centerX - POLE_GAP / 2 + leftPoleEnd.x / 2 - 25}
+            y={baseY + leftPoleEnd.y / 2}
+            fill={chosenPole === 'left' && animationPhase === 'done' ? '#FF2BA1' : 'rgba(255,255,255,0.6)'}
+            fontSize="13"
+            fontFamily="monospace"
+            fontWeight="bold"
+          >
+            {Math.abs(leftAngle)}°
+          </text>
+          <text
+            x={centerX + POLE_GAP / 2 + rightPoleEnd.x / 2 + 10}
+            y={baseY + rightPoleEnd.y / 2}
+            fill={chosenPole === 'right' && animationPhase === 'done' ? '#FF2BA1' : 'rgba(255,255,255,0.6)'}
+            fontSize="13"
+            fontFamily="monospace"
+            fontWeight="bold"
+          >
+            {Math.abs(rightAngle)}°
+          </text>
+
+          {/* Base slime blob */}
+          <motion.ellipse
+            cx={centerX}
+            cy={baseY + 5}
+            rx={POLE_GAP / 2 + 10}
+            ry={15}
+            fill="#FFC738"
+            opacity={0.6}
+            initial={{ scale: 0 }}
+            animate={{ 
+              scale: animationPhase === 'done' ? 0.3 : 1,
+              opacity: animationPhase === 'done' ? 0.2 : 0.6 
+            }}
+            transition={{ duration: 0.5 }}
+          />
+
+          {/* Left slime tendril */}
+          {slimePositions.left > 0 && (
+            <motion.circle
+              cx={centerX - POLE_GAP / 2 + leftSlimePos.x}
+              cy={baseY + leftSlimePos.y}
+              r={SLIME_RADIUS * (slimePositions.left / 100 + 0.5)}
+              fill="#FFC738"
+              initial={{ opacity: 0 }}
+              animate={{ 
+                opacity: slimePositions.left > 0 ? 0.9 : 0,
+                r: SLIME_RADIUS * (slimePositions.left / 100 + 0.5)
+              }}
+            />
+          )}
+
+          {/* Right slime tendril */}
+          {slimePositions.right > 0 && (
+            <motion.circle
+              cx={centerX + POLE_GAP / 2 + rightSlimePos.x}
+              cy={baseY + rightSlimePos.y}
+              r={SLIME_RADIUS * (slimePositions.right / 100 + 0.5)}
+              fill="#FFC738"
+              initial={{ opacity: 0 }}
+              animate={{ 
+                opacity: slimePositions.right > 0 ? 0.9 : 0,
+                r: SLIME_RADIUS * (slimePositions.right / 100 + 0.5)
+              }}
+            />
+          )}
+
+          {/* Connection lines from base to climbing slimes */}
+          {slimePositions.left > 0 && slimePositions.left < 100 && (
+            <line
+              x1={centerX - POLE_GAP / 4}
+              y1={baseY}
+              x2={centerX - POLE_GAP / 2 + leftSlimePos.x}
+              y2={baseY + leftSlimePos.y}
+              stroke="#FFC738"
+              strokeWidth="3"
+              opacity={0.5}
+            />
+          )}
+          {slimePositions.right > 0 && slimePositions.right < 100 && (
+            <line
+              x1={centerX + POLE_GAP / 4}
+              y1={baseY}
+              x2={centerX + POLE_GAP / 2 + rightSlimePos.x}
+              y2={baseY + rightSlimePos.y}
+              stroke="#FFC738"
+              strokeWidth="3"
+              opacity={0.5}
+            />
+          )}
+        </svg>
+
+        {/* Status text */}
+        <motion.p
+          className="text-center text-sm sm:text-base text-white/60 mt-3"
+          animate={{ opacity: 1 }}
+        >
+          {animationPhase === 'idle' && '🧫 Preparing slime mold...'}
+          {animationPhase === 'climbing' && '🔍 Exploring both paths...'}
+          {animationPhase === 'choosing' && `⚡ Moving to the easier climb...`}
+          {animationPhase === 'done' && (
+            <span className="text-biogold font-semibold">
+              ✓ Chose {chosenPole} pole ({Math.abs(chosenPole === 'left' ? leftAngle : rightAngle)}° — easier climb!)
+            </span>
+          )}
+        </motion.p>
+
+        {/* Restart button */}
+        {animationPhase === 'done' && (
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            onClick={handleRestart}
+            className="mt-4 px-6 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white/70 hover:text-white text-sm transition-all mx-auto block"
+          >
+            🔄 Run Again
+          </motion.button>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
 export default function ResultScreen({
   trainingStarted,
   trainingScore,
   answers,
-  uploadedImageUrl,
+  mapView,
   pinCoordinates,
   onRestart,
 }: ResultScreenProps) {
   const [showHeatmap, setShowHeatmap] = useState(false)
   const [heatmapData, setHeatmapData] = useState<number[][]>([])
-  const imageRef = useRef<HTMLImageElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [cellSize, setCellSize] = useState(24)
+  const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null)
+  const mapWrapperRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (showHeatmap && uploadedImageUrl && imageRef.current) {
-      const img = imageRef.current
-      
-      const generateHeatmap = () => {
-        const imgWidth = img.offsetWidth || img.clientWidth
-        const imgHeight = img.offsetHeight || img.clientHeight
-        
-        // Create grid - adjust cell size based on image size
-        const cellSize = Math.max(20, Math.min(40, Math.floor(imgWidth / 25)))
-        const cols = Math.ceil(imgWidth / cellSize)
-        const rows = Math.ceil(imgHeight / cellSize)
-        
-        // Generate random heat values (0-1) for each cell
-        const grid: number[][] = []
-        for (let row = 0; row < rows; row++) {
-          const rowData: number[] = []
-          for (let col = 0; col < cols; col++) {
-            // Higher values near pin if it exists
-            let value = Math.random()
-            if (pinCoordinates) {
-              const cellX = col * cellSize + cellSize / 2
-              const cellY = row * cellSize + cellSize / 2
-              const distX = Math.abs(cellX - pinCoordinates.x)
-              const distY = Math.abs(cellY - pinCoordinates.y)
-              const distance = Math.sqrt(distX * distX + distY * distY)
-              const maxDist = Math.sqrt(imgWidth * imgWidth + imgHeight * imgHeight)
-              // Closer to pin = higher value, but still random
-              const proximityBonus = 1 - (distance / maxDist) * 0.5
-              value = Math.min(1, value * 0.7 + proximityBonus * 0.3)
-            }
-            rowData.push(value)
-          }
-          grid.push(rowData)
-        }
-        
-        setHeatmapData(grid)
+    if (!showHeatmap || !mapWrapperRef.current) return
+
+    const generateHeatmap = async () => {
+      const L = (await import('leaflet')).default
+
+      const width = mapWrapperRef.current!.clientWidth
+      const height = mapWrapperRef.current!.clientHeight
+      if (!width || !height) return
+
+      const size = Math.max(18, Math.min(36, Math.floor(width / 22)))
+      setCellSize(size)
+
+      const cols = Math.ceil(width / size)
+      const rows = Math.ceil(height / size)
+
+      let pinPixel: { x: number; y: number } | null = null
+      if (pinCoordinates && mapInstance) {
+        const point = mapInstance.latLngToContainerPoint(L.latLng(pinCoordinates.lat, pinCoordinates.lng))
+        pinPixel = { x: point.x, y: point.y }
       }
 
-      if (img.complete && img.naturalWidth > 0) {
-        generateHeatmap()
-      } else {
-        img.onload = generateHeatmap
-        setTimeout(generateHeatmap, 100)
+      // Create 1-2 large concentrated clusters
+      const numClusters = 1 + Math.floor(Math.random() * 2)
+      const clusters: { x: number; y: number; intensity: number; radius: number }[] = []
+
+      if (pinPixel) {
+        clusters.push({
+          x: pinPixel.x,
+          y: pinPixel.y,
+          intensity: 0.9,
+          radius: 140 + Math.random() * 80,
+        })
       }
+
+      for (let i = clusters.length; i < numClusters; i++) {
+        clusters.push({
+          x: Math.random() * width,
+          y: Math.random() * height,
+          intensity: 0.75 + Math.random() * 0.2,
+          radius: 120 + Math.random() * 80,
+        })
+      }
+
+      const grid: number[][] = []
+      for (let row = 0; row < rows; row++) {
+        const rowData: number[] = []
+        for (let col = 0; col < cols; col++) {
+          const cellX = col * size + size / 2
+          const cellY = row * size + size / 2
+
+          let maxInfluence = 0
+          for (const cluster of clusters) {
+            const distX = cellX - cluster.x
+            const distY = cellY - cluster.y
+            const distance = Math.sqrt(distX * distX + distY * distY)
+            const sigma = cluster.radius / 2
+            const influence = cluster.intensity * Math.exp(-(distance * distance) / (2 * sigma * sigma))
+            maxInfluence = Math.max(maxInfluence, influence)
+          }
+
+          const baseNoise = 0.15 + Math.random() * 0.15
+          const value = Math.min(1, maxInfluence * 0.85 + baseNoise * 0.15)
+          rowData.push(value)
+        }
+        grid.push(rowData)
+      }
+
+      setHeatmapData(grid)
     }
-  }, [showHeatmap, uploadedImageUrl, pinCoordinates])
+
+    generateHeatmap()
+  }, [showHeatmap, mapInstance, pinCoordinates])
 
   const handleShowRoute = () => {
     setShowHeatmap(true)
@@ -125,7 +566,7 @@ export default function ResultScreen({
             </motion.p>
 
             {/* Show heatmap button */}
-            {uploadedImageUrl && !showHeatmap && (
+            {!showHeatmap && (
               <motion.button
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -139,7 +580,7 @@ export default function ResultScreen({
 
             {/* Heatmap visualization */}
             <AnimatePresence>
-              {showHeatmap && uploadedImageUrl && (
+              {showHeatmap && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -147,123 +588,57 @@ export default function ResultScreen({
                   transition={{ duration: 0.4 }}
                   className="w-full max-w-4xl mx-auto mt-8"
                 >
-                  <div 
-                    ref={containerRef}
-                    className="relative border-2 border-white/20 rounded-lg p-2 sm:p-4 bg-black/10 overflow-hidden"
-                  >
-                    <img
-                      ref={imageRef}
-                      src={uploadedImageUrl}
-                      alt="Heatmap visualization"
-                      className="w-full h-auto block rounded"
-                      onLoad={() => {
-                        // Generate heatmap when image loads
-                        if (imageRef.current) {
-                          const img = imageRef.current
-                          const imgWidth = img.offsetWidth || img.clientWidth
-                          const imgHeight = img.offsetHeight || img.clientHeight
-                          
-                          const cellSize = Math.max(20, Math.min(40, Math.floor(imgWidth / 25)))
-                          const cols = Math.ceil(imgWidth / cellSize)
-                          const rows = Math.ceil(imgHeight / cellSize)
-                          
-                          // Create 1-2 large concentrated clusters
-                          const numClusters = 1 + Math.floor(Math.random() * 2)
-                          const clusters: { x: number; y: number; intensity: number; radius: number }[] = []
-                          
-                          // If pin exists, make one cluster centered on it
-                          if (pinCoordinates) {
-                            clusters.push({
-                              x: pinCoordinates.x,
-                              y: pinCoordinates.y,
-                              intensity: 0.85 + Math.random() * 0.15, // 0.85-1.0
-                              radius: 120 + Math.random() * 80, // 120-200px radius
-                            })
-                          }
-                          
-                          // Add 0-1 additional random clusters
-                          for (let i = clusters.length; i < numClusters; i++) {
-                            clusters.push({
-                              x: Math.random() * imgWidth,
-                              y: Math.random() * imgHeight,
-                              intensity: 0.7 + Math.random() * 0.3, // 0.7-1.0
-                              radius: 100 + Math.random() * 100, // 100-200px radius
-                            })
-                          }
-                          
-                          const grid: number[][] = []
-                          for (let row = 0; row < rows; row++) {
-                            const rowData: number[] = []
-                            for (let col = 0; col < cols; col++) {
-                              const cellX = col * cellSize + cellSize / 2
-                              const cellY = row * cellSize + cellSize / 2
-                              
-                              // Calculate value based on distance to nearest cluster
-                              let maxInfluence = 0
-                              for (const cluster of clusters) {
-                                const distX = cellX - cluster.x
-                                const distY = cellY - cluster.y
-                                const distance = Math.sqrt(distX * distX + distY * distY)
-                                
-                                // Smooth Gaussian falloff with larger radius
-                                const sigma = cluster.radius / 2 // Standard deviation
-                                const influence = cluster.intensity * Math.exp(-(distance * distance) / (2 * sigma * sigma))
-                                maxInfluence = Math.max(maxInfluence, influence)
-                              }
-                              
-                              // Add minimal base noise - much less randomization
-                              const baseNoise = 0.15 + Math.random() * 0.15 // 0.15-0.3 (reduced)
-                              const value = Math.min(1, maxInfluence * 0.85 + baseNoise * 0.15)
-                              
-                              rowData.push(value)
-                            }
-                            grid.push(rowData)
-                          }
-                          
-                          setHeatmapData(grid)
-                        }
-                      }}
-                    />
-                    {/* Heatmap grid overlay */}
-                    {imageRef.current && heatmapData.length > 0 && (
-                      <div
-                        className="absolute top-2 sm:top-4 left-2 sm:left-4 pointer-events-none"
-                        style={{
-                          width: imageRef.current.offsetWidth || '100%',
-                          height: imageRef.current.offsetHeight || '100%',
-                        }}
+                  <div className="relative border-2 border-white/20 rounded-lg p-2 sm:p-4 bg-black/10 overflow-hidden">
+                    <div
+                      ref={mapWrapperRef}
+                      className="relative h-[55vh] sm:h-[60vh] w-full rounded-lg overflow-hidden"
+                    >
+                      <MapContainer
+                        center={mapView?.center ?? DEFAULT_CENTER}
+                        zoom={mapView?.zoom ?? DEFAULT_ZOOM}
+                        scrollWheelZoom
+                        className="h-full w-full"
+                        whenCreated={setMapInstance}
                       >
+                        <TileLayer
+                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        />
+                        {pinCoordinates && (
+                          <CircleMarker
+                            center={pinCoordinates}
+                            radius={8}
+                            pathOptions={{ color: '#FF2BA1', fillColor: '#FF2BA1', fillOpacity: 0.9 }}
+                          />
+                        )}
+                      </MapContainer>
+                    </div>
+
+                    {/* Heatmap grid overlay - z-10 to be on top of the map */}
+                    {heatmapData.length > 0 && (
+                      <div className="absolute inset-0 pointer-events-none z-10">
                         {heatmapData.map((row, rowIdx) =>
                           row.map((value, colIdx) => {
-                            const cellSize = Math.max(20, Math.min(40, Math.floor((imageRef.current?.offsetWidth || 500) / 25)))
-                            
-                            // Map value (0-1) to red shades - all darker
-                            // Lower values = medium red, higher values = very dark red
                             let redValue: number
                             let opacity: number
-                            
+
                             if (value < 0.3) {
-                              // Medium-dark red
                               redValue = 180
-                              opacity = 0.4 + value * 0.2 // 0.4-0.46
+                              opacity = 0.4 + value * 0.2
                             } else if (value < 0.5) {
-                              // Dark red
                               redValue = 150
-                              opacity = 0.5 + (value - 0.3) * 0.2 // 0.5-0.54
+                              opacity = 0.5 + (value - 0.3) * 0.2
                             } else if (value < 0.7) {
-                              // Very dark red
                               redValue = 120
-                              opacity = 0.6 + (value - 0.5) * 0.15 // 0.6-0.63
+                              opacity = 0.6 + (value - 0.5) * 0.15
                             } else if (value < 0.85) {
-                              // Extremely dark red
                               redValue = 90
-                              opacity = 0.65 + (value - 0.7) * 0.2 // 0.65-0.68
+                              opacity = 0.65 + (value - 0.7) * 0.2
                             } else {
-                              // Darkest red (almost maroon)
                               redValue = 60
-                              opacity = 0.7 + (value - 0.85) * 0.2 // 0.7-0.73
+                              opacity = 0.7 + (value - 0.85) * 0.2
                             }
-                            
+
                             return (
                               <motion.div
                                 key={`${rowIdx}-${colIdx}`}
@@ -277,6 +652,7 @@ export default function ResultScreen({
                                   width: `${cellSize}px`,
                                   height: `${cellSize}px`,
                                   backgroundColor: `rgb(${redValue}, 0, 0)`,
+                                  opacity,
                                   border: '0.5px solid rgba(255, 0, 0, 0.1)',
                                 }}
                               />
@@ -285,7 +661,7 @@ export default function ResultScreen({
                         )}
                       </div>
                     )}
-                    
+
                     {/* Legend */}
                     <div className="absolute bottom-4 right-4 bg-background/95 backdrop-blur-sm border border-white/20 rounded-lg px-4 py-3 shadow-lg z-20">
                       <div className="flex items-center gap-3">
@@ -299,25 +675,13 @@ export default function ResultScreen({
                         </p>
                       </div>
                     </div>
-                    
-                    {/* Pin marker if exists */}
-                    {pinCoordinates && (
-                      <div
-                        className="absolute pointer-events-none z-10"
-                        style={{
-                          left: `${pinCoordinates.x}px`,
-                          top: `${pinCoordinates.y}px`,
-                          transform: 'translate(-50%, -100%)',
-                        }}
-                      >
-                        <div className="w-6 h-6 bg-accent rounded-full border-2 border-white shadow-lg" />
-                        <div className="w-1 h-8 bg-accent mx-auto mt-0.5" />
-                      </div>
-                    )}
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Slime Mold Simulation */}
+            {showHeatmap && <SlimeMoldSimulation />}
 
             {/* Recap */}
             <motion.div

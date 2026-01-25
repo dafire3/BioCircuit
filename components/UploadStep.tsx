@@ -1,92 +1,101 @@
 'use client'
 
-import { useState, useRef, DragEvent, MouseEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
+import dynamic from 'next/dynamic'
+import type { LatLngLiteral, Map as LeafletMap } from 'leaflet'
+import { useMap, useMapEvents } from 'react-leaflet'
+
+const MapContainer = dynamic(() => import('react-leaflet').then((m) => m.MapContainer), { ssr: false })
+const TileLayer = dynamic(() => import('react-leaflet').then((m) => m.TileLayer), { ssr: false })
+const CircleMarker = dynamic(() => import('react-leaflet').then((m) => m.CircleMarker), { ssr: false })
 
 interface UploadStepProps {
-  onUploadComplete: (imageUrl: string, pinCoordinates?: { x: number; y: number }) => void
+  onUploadComplete: (mapState: { center: LatLngLiteral; zoom: number; pin: LatLngLiteral }) => void
+}
+
+const DEFAULT_CENTER: LatLngLiteral = { lat: 39.8283, lng: -98.5795 }
+const DEFAULT_ZOOM = 4
+
+function MapController({
+  target,
+  zoom,
+}: {
+  target: LatLngLiteral | null
+  zoom: number
+}) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!target) return
+    map.setView(target, Math.max(zoom, 14), { animate: true })
+  }, [map, target, zoom])
+
+  return null
+}
+
+function MapClickHandler({ onPick }: { onPick: (latlng: LatLngLiteral) => void }) {
+  useMapEvents({
+    click(e) {
+      onPick(e.latlng)
+    },
+  })
+  return null
 }
 
 export default function UploadStep({ onUploadComplete }: UploadStepProps) {
-  const [file, setFile] = useState<File | null>(null)
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
-  const [pinPosition, setPinPosition] = useState<{ x: number; y: number } | null>(null)
+  const [pinPosition, setPinPosition] = useState<LatLngLiteral | null>(null)
   const [showPinQuestion, setShowPinQuestion] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const imageContainerRef = useRef<HTMLDivElement>(null)
+  const [mapCenter, setMapCenter] = useState<LatLngLiteral>(DEFAULT_CENTER)
+  const [mapZoom, setMapZoom] = useState(DEFAULT_ZOOM)
+  const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null)
+  const [coordLat, setCoordLat] = useState('')
+  const [coordLng, setCoordLng] = useState('')
+  const [coordError, setCoordError] = useState<string | null>(null)
+  const [targetCoords, setTargetCoords] = useState<LatLngLiteral | null>(null)
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
+  useEffect(() => {
+    if (!mapInstance) return
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const droppedFile = e.dataTransfer.files[0]
-    if (droppedFile) {
-      handleFileSelect(droppedFile)
+    const handleMapClick = (e: { latlng: LatLngLiteral }) => {
+      setPinPosition(e.latlng)
     }
-  }
 
-  const handleFileSelect = (selectedFile: File) => {
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg']
-    if (validTypes.includes(selectedFile.type)) {
-      setFile(selectedFile)
-      setError(null)
-      
-      // Create object URL for image preview
-      const url = URL.createObjectURL(selectedFile)
-      setImageUrl(url)
-      
-      // Show pin question after a short delay
-      setTimeout(() => {
-        setShowPinQuestion(true)
-      }, 500)
-    } else {
-      setError('Please upload a PNG or JPG image file')
+    const handleMoveEnd = () => {
+      const center = mapInstance.getCenter()
+      setMapCenter({ lat: center.lat, lng: center.lng })
+      setMapZoom(mapInstance.getZoom())
     }
-  }
 
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile) {
-      handleFileSelect(selectedFile)
+    mapInstance.on('click', handleMapClick)
+    mapInstance.on('moveend', handleMoveEnd)
+    setShowPinQuestion(true)
+
+    return () => {
+      mapInstance.off('click', handleMapClick)
+      mapInstance.off('moveend', handleMoveEnd)
     }
-  }
-
-  const handleImageClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (!imageContainerRef.current || !imageUrl) return
-
-    const containerRect = imageContainerRef.current.getBoundingClientRect()
-    const img = imageContainerRef.current.querySelector('img')
-    if (!img) return
-
-    const imgRect = img.getBoundingClientRect()
-    
-    // Calculate click position relative to the image (not container)
-    const x = e.clientX - imgRect.left
-    const y = e.clientY - imgRect.top
-
-    // Constrain to image bounds
-    const constrainedX = Math.max(0, Math.min(x, imgRect.width))
-    const constrainedY = Math.max(0, Math.min(y, imgRect.height))
-
-    // Store position relative to container for absolute positioning
-    const containerX = e.clientX - containerRect.left
-    const containerY = e.clientY - containerRect.top
-
-    setPinPosition({ x: containerX, y: containerY })
-  }
+  }, [mapInstance])
 
   const handleContinue = () => {
-    if (!file || !imageUrl) return
+    if (!pinPosition) return
+    onUploadComplete({ center: mapCenter, zoom: mapZoom, pin: pinPosition })
+  }
 
-    // Don't revoke URL yet - we need it for the result screen
-    // It will be cleaned up when component unmounts or on restart
-    onUploadComplete(imageUrl, pinPosition || undefined)
+  const handleGoToCoordinates = () => {
+    const lat = Number(coordLat)
+    const lng = Number(coordLng)
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      setCoordError('Enter valid numbers for latitude and longitude.')
+      return
+    }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setCoordError('Latitude must be -90 to 90, longitude -180 to 180.')
+      return
+    }
+    setCoordError(null)
+    setTargetCoords({ lat, lng })
   }
 
   return (
@@ -115,106 +124,104 @@ export default function UploadStep({ onUploadComplete }: UploadStepProps) {
         )}
       </AnimatePresence>
 
-      <div className="max-w-2xl w-full space-y-8">
-        {/* Header - only show when no image */}
-        {!imageUrl && (
-          <div className="text-center space-y-3 sm:space-y-4">
-            <div className="flex items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-6">
-              <Image
-                src="/biocircuit-logo.png"
-                alt="BioCircuit"
-                width={48}
-                height={48}
-                className="w-8 h-8 sm:w-12 sm:h-12"
-              />
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">BioCircuit</h1>
-            </div>
-            <p className="text-base sm:text-lg md:text-xl text-white/70 px-2">
-              Upload a map or LiDAR scan to begin.
-            </p>
-          </div>
-        )}
-
-        {/* Dropzone or Image Display */}
-        {!imageUrl ? (
-          <div
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className="relative border-2 border-dashed border-white/20 rounded-lg p-8 sm:p-12 md:p-16 text-center cursor-pointer transition-all hover:border-white/40 hover:bg-white/5"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".png,.jpg,.jpeg"
-              onChange={handleFileInputChange}
-              className="hidden"
+      <div className="max-w-3xl w-full space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-3 sm:space-y-4">
+          <div className="flex items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-6">
+            <Image
+              src="/biocircuit-logo.png"
+              alt="BioCircuit"
+              width={48}
+              height={48}
+              className="w-8 h-8 sm:w-12 sm:h-12"
             />
-
-            <div className="space-y-3 sm:space-y-4">
-              <div className="text-4xl sm:text-5xl md:text-6xl mb-2 sm:mb-4">📄</div>
-              <p className="text-base sm:text-lg text-white/80 px-2">
-                Drop your map here, or click to upload
-              </p>
-              <p className="text-xs sm:text-sm text-white/50">
-                PNG or JPG files
-              </p>
-            </div>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white">BioCircuit</h1>
           </div>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
-            className="relative w-full"
-          >
-            {/* Image container with click handler - same styling as dropzone */}
-            <div
-              ref={imageContainerRef}
-              onClick={handleImageClick}
-              className="relative border-2 border-dashed border-white/20 rounded-lg p-2 sm:p-4 bg-black/10 cursor-crosshair transition-all hover:border-white/30 overflow-hidden"
-            >
-              <img
-                src={imageUrl}
-                alt="Uploaded map"
-                className="w-full h-auto max-h-[50vh] sm:max-h-[60vh] object-contain mx-auto block rounded"
-                draggable={false}
-              />
-              
-              {/* Pin marker */}
-              {pinPosition && (
-                <motion.div
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="absolute pointer-events-none z-10"
-                  style={{
-                    left: `${pinPosition.x}px`,
-                    top: `${pinPosition.y}px`,
-                    transform: 'translate(-50%, -100%)',
-                  }}
-                >
-                  <div className="w-6 h-6 bg-accent rounded-full border-2 border-white shadow-lg" />
-                  <div className="w-1 h-8 bg-accent mx-auto mt-0.5" />
-                </motion.div>
-              )}
+          <p className="text-base sm:text-lg md:text-xl text-white/70 px-2">
+            Click on the map to mark the artifact location.
+          </p>
+        </div>
 
-              {/* Click hint overlay */}
-              {!pinPosition && showPinQuestion && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="absolute inset-0 flex items-center justify-center bg-black/30 rounded backdrop-blur-sm"
-                >
-                  <p className="text-white/80 text-sm sm:text-base md:text-lg font-light px-4 text-center">Click on the artifact location</p>
-                </motion.div>
-              )}
-            </div>
-          </motion.div>
+        {/* Coordinate jump */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch">
+          <input
+            value={coordLat}
+            onChange={(e) => setCoordLat(e.target.value)}
+            placeholder="Latitude (e.g., 34.0522)"
+            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm sm:text-base text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <input
+            value={coordLng}
+            onChange={(e) => setCoordLng(e.target.value)}
+            placeholder="Longitude (e.g., -118.2437)"
+            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm sm:text-base text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <button
+            onClick={handleGoToCoordinates}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white/80 hover:text-white text-sm sm:text-base transition-all"
+          >
+            Go to
+          </button>
+        </div>
+        {coordError && (
+          <p className="text-sm text-red-400 text-center">{coordError}</p>
         )}
+
+        {/* Map container */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="relative w-full"
+        >
+          <div className="relative border-2 border-dashed border-white/20 rounded-lg p-2 sm:p-4 bg-black/10 overflow-hidden">
+            <div className="h-[55vh] sm:h-[60vh] w-full rounded-lg overflow-hidden">
+              <MapContainer
+                center={mapCenter}
+                zoom={mapZoom}
+                scrollWheelZoom
+                className="h-full w-full"
+                whenCreated={setMapInstance}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapController target={targetCoords} zoom={mapZoom} />
+                <MapClickHandler
+                  onPick={(latlng) => {
+                    setPinPosition(latlng)
+                    setShowPinQuestion(false)
+                  }}
+                />
+                {pinPosition && (
+                  <CircleMarker
+                    center={pinPosition}
+                    radius={8}
+                    pathOptions={{ color: '#FF2BA1', fillColor: '#FF2BA1', fillOpacity: 0.9 }}
+                  />
+                )}
+              </MapContainer>
+            </div>
+
+            {/* Click hint overlay */}
+            {!pinPosition && showPinQuestion && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm"
+              >
+                <p className="text-white/80 text-sm sm:text-base md:text-lg font-light px-4 text-center">
+                  Click on the artifact location
+                </p>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
 
         {/* Continue button */}
         <AnimatePresence>
-          {imageUrl && pinPosition && (
+          {pinPosition && (
             <motion.button
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -224,20 +231,6 @@ export default function UploadStep({ onUploadComplete }: UploadStepProps) {
             >
               Continue to Questions
             </motion.button>
-          )}
-        </AnimatePresence>
-
-        {/* Error message */}
-        <AnimatePresence>
-          {error && (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="text-center text-red-400"
-            >
-              {error}
-            </motion.p>
           )}
         </AnimatePresence>
       </div>
