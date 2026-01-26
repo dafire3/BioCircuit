@@ -27,18 +27,12 @@ export default function MiniHeader() {
             />
             <span className="text-sm sm:text-base md:text-lg font-semibold">BioCircuit</span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-white/5 border border-white/10 text-[10px] sm:text-xs text-white/60 hover:bg-white/10 hover:text-white/80 transition-all whitespace-nowrap"
-            >
-              What is BioCircuit?
-            </button>
-            <div className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-white/5 border border-white/10 text-[10px] sm:text-xs text-white/60 whitespace-nowrap">
-              <span className="hidden sm:inline">Concept demo · Not real AI</span>
-              <span className="sm:hidden">Demo</span>
-            </div>
-          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-white/5 border border-white/10 text-[10px] sm:text-xs text-white/60 hover:bg-white/10 hover:text-white/80 transition-all whitespace-nowrap"
+          >
+            What is BioCircuit?
+          </button>
         </div>
       </motion.header>
       
